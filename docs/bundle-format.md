@@ -12,11 +12,11 @@ reference reader.
 
 A recording at 32 kHz across 24 channels for 24 hours is about 265 GB in float32. A
 viewer draws an overview into roughly 2000 pixels. Fetching raw samples to compute those
-2000 columns is impossible in a browser, so the producer precomputes min/max envelopes at
+2000 columns is intractable in a browser, so the producer precomputes min/max envelopes at
 several resolutions and the reader fetches only the bins one viewport needs.
 
 The container is stock Zarr v3. There is no sidecar manifest, no schema language, and no
-namespace prefix. The whole custom surface is seven attribute keys in the standard Zarr
+namespace prefix. The only custom surface is seven attribute keys within the standard Zarr
 `attributes` field: six on each channel group and one on each level and waveform array.
 Any Zarr v3 library can open a bundle.
 
@@ -69,11 +69,10 @@ The fold is exact and needs one chunk of memory at a time:
 - Level `k+1` takes the min of the 4 mins and the max of the 4 maxes over each disjoint
   block of 4 pairs from level `k`.
 
-A trailing partial block of 1 to 3 elements still produces a final bin, so no sample is
-dropped.
+A trailing partial block of 1 to 3 elements produces a final bin.
 
-The fold uses plain min and max, not the NaN-aware variants. A NaN therefore propagates
-up the pyramid, and the reader treats finite values as "has data" and NaN as a gap.
+The fold uses plain min and max and not its NaN-aware variants. A NaN therefore propagates
+up the pyramid, and the reader must treat NaN as a gap.
 
 A bundle holds at most 8 levels: level 0 plus levels 1 through 7, a range of 16384x. The
 producer stops early once the next level runs out of complete bins: level `k` at or above
@@ -163,26 +162,11 @@ precision of `float64` reaches no screen and costs twice the storage.
 ## Consolidated metadata
 
 The root `zarr.json` must carry a Zarr v3 `consolidated_metadata` block inlining every
-descendant `zarr.json`. One GET then yields the whole tree: channels, levels, shapes,
-dtypes, and attributes.
+descendant `zarr.json`. This allows a single fetch to produce the whole trees
+metadata of  channels, levels, shapes, dtypes, and attributes.
 
-Without it, a bundle of N channels costs about `8N + 1` metadata requests before the
-first chunk fetch. With it, the cost is 1.
-
-## Publishing
-
-A reader can open a bundle at any moment, so a half-written bundle must never be visible.
-The producer writes the whole bundle into a staging directory and then renames it onto
-its final path. A first publish is one rename. Re-publishing over an existing bundle
-renames the old bundle aside, renames the staging directory in, and removes the backup,
-which leaves a brief window in which the final path is absent. On an object store, stage
-under a separate prefix and swap.
-
-Re-ingest rewrites every array. Sharded Zarr arrays do not append well, and rebuilding the
-pyramid costs about 67% on top of the raw copy. Ingest runs once per recording; reads run
-constantly.
-
-Live recordings are out of scope. A bundle is built once, when ingest ends.
+Otherwise a bundle of N channels costs about `8N + 1` metadata requests before the
+first chunk fetch.
 
 ## Compatibility
 
@@ -190,6 +174,3 @@ There is no `format_version` attribute. Zarr's own mechanisms carry forward
 compatibility: new attribute keys are additive and readers ignore what they do not
 recognize, and new arrays are discovered through consolidated metadata enumeration rather
 than assumed.
-
-A reader that meets a structural mismatch fails loudly rather than guessing. If a breaking
-change ever lands, add `format_version` to the root group at that point.
