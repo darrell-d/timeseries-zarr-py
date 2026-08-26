@@ -1,5 +1,5 @@
 [project]
-name = "ts-zarr-py"
+name = "timeseries-zarr-py"
 version = "0.1.0"
 description = "Producer for pyramid Zarr v3 viewer bundles from neurophysiology time series"
 requires-python = ">=3.12"
@@ -24,10 +24,10 @@ dev = [
 ]
 
 [tool.coverage.run]
-source = ["ts_zarr"]
+source = ["timeseries_zarr"]
 omit = [
-    "ts_zarr/__init__.py",
-    "ts_zarr/main.py",
+    "timeseries_zarr/__init__.py",
+    "timeseries_zarr/main.py",
 ]
 
 [tool.coverage.report]
@@ -88,7 +88,7 @@ warn_unreachable = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 show_error_codes = true
-files = ["ts_zarr"]
+files = ["timeseries_zarr"]
 
 # Third-party libraries without complete type information.
 [[tool.mypy.overrides]]

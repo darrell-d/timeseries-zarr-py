@@ -1,6 +1,6 @@
 .PHONY: help run clean venv install test test-cov lint typecheck check pre-commit
 
-SERVICE_NAME  ?= "ts-zarr-py"
+SERVICE_NAME  ?= "timeseries-zarr-py"
 VENV_DIR      ?= venv
 PYTHON        ?= python3
 
@@ -23,7 +23,7 @@ help:
 venv:
 	$(PYTHON) -m venv $(VENV_DIR)
 	$(VENV_DIR)/bin/pip install --upgrade pip
-	$(VENV_DIR)/bin/pip install -r ts_zarr/requirements.txt
+	$(VENV_DIR)/bin/pip install -r timeseries_zarr/requirements.txt
 	$(VENV_DIR)/bin/pip install -r requirements-test.txt
 	@echo ""
 	@echo "Virtual environment created. Activate with:"
@@ -31,26 +31,26 @@ venv:
 
 install:
 	$(VENV_DIR)/bin/pip install --upgrade pip
-	$(VENV_DIR)/bin/pip install -r ts_zarr/requirements.txt
+	$(VENV_DIR)/bin/pip install -r timeseries_zarr/requirements.txt
 	$(VENV_DIR)/bin/pip install -r requirements-test.txt
 
 test:
 	$(VENV_DIR)/bin/python -m pytest tests/ -v
 
 test-cov:
-	$(VENV_DIR)/bin/python -m pytest tests/ -v --cov=ts_zarr --cov-report=term-missing
+	$(VENV_DIR)/bin/python -m pytest tests/ -v --cov=timeseries_zarr --cov-report=term-missing
 
 lint:
-	$(VENV_DIR)/bin/ruff check --fix ts_zarr/ tests/
-	$(VENV_DIR)/bin/ruff format ts_zarr/ tests/
+	$(VENV_DIR)/bin/ruff check --fix timeseries_zarr/ tests/
+	$(VENV_DIR)/bin/ruff format timeseries_zarr/ tests/
 
 typecheck:
-	$(VENV_DIR)/bin/mypy ts_zarr/
+	$(VENV_DIR)/bin/mypy timeseries_zarr/
 
 check:
-	$(VENV_DIR)/bin/ruff check ts_zarr/ tests/
-	$(VENV_DIR)/bin/ruff format --check ts_zarr/ tests/
-	$(VENV_DIR)/bin/mypy ts_zarr/
+	$(VENV_DIR)/bin/ruff check timeseries_zarr/ tests/
+	$(VENV_DIR)/bin/ruff format --check timeseries_zarr/ tests/
+	$(VENV_DIR)/bin/mypy timeseries_zarr/
 	$(VENV_DIR)/bin/python -m pytest tests/
 
 pre-commit:

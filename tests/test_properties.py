@@ -1,6 +1,6 @@
 import json
 
-from ts_zarr.properties import ROOT_PATH_KEY, write_properties
+from timeseries_zarr.properties import ROOT_PATH_KEY, write_properties
 
 
 def test_declares_the_bundle_directory_name(tmp_path):

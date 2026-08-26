@@ -11,20 +11,20 @@ from typing import cast
 import numpy as np
 import numpy.typing as npt
 
-from ts_zarr.attrs import channel_group_attrs, level_array_attrs
-from ts_zarr.constants import DECIMATION_FACTOR, FLOAT32_BYTES
-from ts_zarr.fold import fold_block
-from ts_zarr.planning import level0_period_us, plan_levels
-from ts_zarr.protocols import ContinuousChannelSource
-from ts_zarr.sizing import chunk_and_shard
-from ts_zarr.streaming import (
+from timeseries_zarr.attrs import channel_group_attrs, level_array_attrs
+from timeseries_zarr.constants import DECIMATION_FACTOR, FLOAT32_BYTES
+from timeseries_zarr.fold import fold_block
+from timeseries_zarr.planning import level0_period_us, plan_levels
+from timeseries_zarr.protocols import ContinuousChannelSource
+from timeseries_zarr.sizing import chunk_and_shard
+from timeseries_zarr.streaming import (
     BlockReadableArray,
     _rebuffer_and_fold,
     iter_array_blocks,
     iter_raw_blocks,
 )
-from ts_zarr.types import ChunkShard, LevelPlan, WriteOpts
-from ts_zarr.zarr_io import (
+from timeseries_zarr.types import ChunkShard, LevelPlan, WriteOpts
+from timeseries_zarr.zarr_io import (
     ZarrArray,
     ZarrGroup,
     create_array,

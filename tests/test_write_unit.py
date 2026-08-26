@@ -1,16 +1,16 @@
 import numpy as np
 import pytest
 
-from ts_zarr.attrs import channel_group_attrs
-from ts_zarr.planning import level0_period_us
-from ts_zarr.types import ChunkShard, WriteOpts
-from ts_zarr.write_unit import (
+from timeseries_zarr.attrs import channel_group_attrs
+from timeseries_zarr.planning import level0_period_us
+from timeseries_zarr.types import ChunkShard, WriteOpts
+from timeseries_zarr.write_unit import (
     write_events_array,
     write_unit_channel,
     write_units_array,
     write_waveforms_array,
 )
-from ts_zarr.zarr_io import open_group, write_region
+from timeseries_zarr.zarr_io import open_group, write_region
 
 
 def _sizing():
@@ -258,7 +258,7 @@ def test_write_events_array_writes_one_whole_shard_per_write(
         writes.append((start, block.shape[0]))
         write_region(array, start, block)
 
-    monkeypatch.setattr("ts_zarr.write_unit.write_region", spy)
+    monkeypatch.setattr("timeseries_zarr.write_unit.write_region", spy)
     events = np.arange(20, dtype=np.int64) * 10
     group = open_group(tmp_path / "bundle")
     write_events_array(group, unit_source(events), _sizing(), 5)

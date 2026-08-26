@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
-from ts_zarr.constants import (
+from timeseries_zarr.constants import (
     INNER_CHUNK_SAMPLES,
     MAX_LEVELS,
     TARGET_SHARD_BYTES,

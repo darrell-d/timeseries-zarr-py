@@ -3,7 +3,7 @@
 docs/bundle-format.md specifies the keys and their types.
 """
 
-from ts_zarr.types import ChannelKind
+from timeseries_zarr.types import ChannelKind
 
 
 def root_attrs() -> dict[str, object]:

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from ts_zarr.fold import (
+from timeseries_zarr.fold import (
     _block_split,
     fold_block,
     fold_pair_block,

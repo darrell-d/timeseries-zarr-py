@@ -3,14 +3,14 @@ import json
 import numpy as np
 import pytest
 
-from ts_zarr.bundle import (
+from timeseries_zarr.bundle import (
     assign_indices,
     atomic_publish,
     write_all_channels,
     write_bundle,
 )
-from ts_zarr.types import WriteOpts
-from ts_zarr.zarr_io import open_group
+from timeseries_zarr.types import WriteOpts
+from timeseries_zarr.zarr_io import open_group
 
 _OPTS = WriteOpts(
     min_bins=2, max_levels=8, inner_len=16, target_shard_bytes=256

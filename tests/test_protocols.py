@@ -1,6 +1,6 @@
 import numpy as np
 
-from ts_zarr.protocols import ContinuousChannelSource, UnitChannelSource
+from timeseries_zarr.protocols import ContinuousChannelSource, UnitChannelSource
 
 
 class FakeContinuous:

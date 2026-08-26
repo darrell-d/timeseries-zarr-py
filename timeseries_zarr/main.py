@@ -7,10 +7,10 @@ from collections.abc import Sequence
 
 from pynwb import NWBHDF5IO
 
-from ts_zarr.bundle import write_bundle
-from ts_zarr.config import load_config
-from ts_zarr.nwb_reader import build_sources_from_nwb
-from ts_zarr.properties import write_properties
+from timeseries_zarr.bundle import write_bundle
+from timeseries_zarr.config import load_config
+from timeseries_zarr.nwb_reader import build_sources_from_nwb
+from timeseries_zarr.properties import write_properties
 
 logger = logging.getLogger(__name__)
 

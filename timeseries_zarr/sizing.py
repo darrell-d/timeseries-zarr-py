@@ -2,8 +2,8 @@
 
 from math import ceil, prod
 
-from ts_zarr.constants import INNER_CHUNK_SAMPLES, TARGET_SHARD_BYTES
-from ts_zarr.types import ChunkShard
+from timeseries_zarr.constants import INNER_CHUNK_SAMPLES, TARGET_SHARD_BYTES
+from timeseries_zarr.types import ChunkShard
 
 
 def chunk_shape_for_level(

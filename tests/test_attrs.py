@@ -1,6 +1,6 @@
 import pytest
 
-from ts_zarr.attrs import (
+from timeseries_zarr.attrs import (
     channel_group_attrs,
     level_array_attrs,
     root_attrs,

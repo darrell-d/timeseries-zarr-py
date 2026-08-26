@@ -1,4 +1,4 @@
-# ts-zarr-py
+# timeseries-zarr-py
 
 Converts a neurophysiology recording in NWB into a pyramid Zarr v3 viewer bundle: a
 static directory that a browser reads over HTTP range requests to render any time window
@@ -18,7 +18,7 @@ reader is
 Read one NWB file and write one bundle:
 
 ```bash
-python -m ts_zarr.main recording.nwb /data/recording.zarr
+python -m timeseries_zarr.main recording.nwb /data/recording.zarr
 ```
 
 With no arguments the writer takes the directory convention instead: it reads the single
@@ -42,7 +42,7 @@ the atomic publish, by default alongside the output), `ZARR_WRITER_ZSTD_LEVEL`,
 ## Development
 
 Python 3.12, fully typed under `mypy --strict`, with a strict `ruff` ruleset. Tests in
-`tests/` mirror `ts_zarr/` one to one.
+`tests/` mirror `timeseries_zarr/` one to one.
 
 ```bash
 make venv        # create the virtualenv and install deps

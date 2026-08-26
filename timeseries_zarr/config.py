@@ -5,9 +5,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from ts_zarr.constants import MAX_LEVELS
-from ts_zarr.properties import DEFAULT_PROPERTIES_FILE
-from ts_zarr.types import WriteOpts
+from timeseries_zarr.constants import MAX_LEVELS
+from timeseries_zarr.properties import DEFAULT_PROPERTIES_FILE
+from timeseries_zarr.types import WriteOpts
 
 
 @dataclass(frozen=True, slots=True)

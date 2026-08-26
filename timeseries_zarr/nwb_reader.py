@@ -9,7 +9,7 @@ from pynwb import NWBFile
 from pynwb.ecephys import ElectricalSeries
 from pynwb.misc import Units
 
-from ts_zarr.constants import (
+from timeseries_zarr.constants import (
     MAX_UNIT_CLUSTERS,
     MICROSECONDS_PER_SECOND,
     UNIT_TO_UV,

@@ -6,7 +6,7 @@ Every fold uses plain min/max, so a NaN propagates into the bin holding it.
 import numpy as np
 import numpy.typing as npt
 
-from ts_zarr.constants import DECIMATION_FACTOR, ENVELOPE_PAIR_SIZE
+from timeseries_zarr.constants import DECIMATION_FACTOR, ENVELOPE_PAIR_SIZE
 
 
 def _block_split(

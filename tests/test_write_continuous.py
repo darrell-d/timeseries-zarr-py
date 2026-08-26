@@ -4,16 +4,16 @@ import numpy as np
 import pytest
 from zarr import Array
 
-from ts_zarr.attrs import channel_group_attrs
-from ts_zarr.fold import fold_block
-from ts_zarr.planning import plan_levels
-from ts_zarr.types import ChunkShard, LevelPlan, WriteOpts
-from ts_zarr.write_continuous import (
+from timeseries_zarr.attrs import channel_group_attrs
+from timeseries_zarr.fold import fold_block
+from timeseries_zarr.planning import plan_levels
+from timeseries_zarr.types import ChunkShard, LevelPlan, WriteOpts
+from timeseries_zarr.write_continuous import (
     write_continuous_channel,
     write_level0,
     write_level_from_previous,
 )
-from ts_zarr.zarr_io import create_array, open_group, write_region
+from timeseries_zarr.zarr_io import create_array, open_group, write_region
 
 
 def _plan(n, period_us=31.25):
@@ -299,7 +299,7 @@ def _record_writes(monkeypatch, module):
 def test_write_level0_writes_one_whole_shard_per_write(
     tmp_path, continuous_source, monkeypatch
 ):
-    writes = _record_writes(monkeypatch, "ts_zarr.write_continuous")
+    writes = _record_writes(monkeypatch, "timeseries_zarr.write_continuous")
     samples = np.arange(26, dtype=np.float32)
     group = open_group(tmp_path / "bundle")
     write_level0(group, continuous_source(samples), _plan(26), _sizing(), 5)
@@ -315,7 +315,7 @@ def test_write_level_from_previous_writes_one_whole_shard_per_write(
     prev = _make_prev(group, data)
     plan = LevelPlan(level=1, shape=(16, 2), period_us=125.0)
     sizing = ChunkShard(chunk_shape=(4, 2), shard_shape=(8, 2))
-    writes = _record_writes(monkeypatch, "ts_zarr.write_continuous")
+    writes = _record_writes(monkeypatch, "timeseries_zarr.write_continuous")
     write_level_from_previous(group, prev, plan, sizing, 5)
     assert writes == [(0, 8), (8, 8)]
     assert np.array_equal(

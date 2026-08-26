@@ -6,9 +6,9 @@ from typing import Protocol
 import numpy as np
 import numpy.typing as npt
 
-from ts_zarr.constants import DECIMATION_FACTOR
-from ts_zarr.fold import fold_raw_block
-from ts_zarr.protocols import ContinuousChannelSource
+from timeseries_zarr.constants import DECIMATION_FACTOR
+from timeseries_zarr.fold import fold_raw_block
+from timeseries_zarr.protocols import ContinuousChannelSource
 
 
 class BlockReadableArray(Protocol):

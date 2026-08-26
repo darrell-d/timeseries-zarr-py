@@ -5,7 +5,7 @@ time resolutions. A browser opens it over HTTP range requests and renders any ti
 window without downloading the recording. This document specifies the format so that
 other producers can write it and other readers can consume it.
 
-`ts-zarr-py` is the reference producer. `@pennsieve/timeseries-zarr-reader` is the
+`timeseries-zarr-py` is the reference producer. `@pennsieve/timeseries-zarr-reader` is the
 reference reader.
 
 ## Why a pyramid

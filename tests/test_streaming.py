@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from ts_zarr.fold import fold_pair_block, fold_raw_block
-from ts_zarr.streaming import (
+from timeseries_zarr.fold import fold_pair_block, fold_raw_block
+from timeseries_zarr.streaming import (
     _rebuffer_and_fold,
     iter_array_blocks,
     iter_level0_to_level1,

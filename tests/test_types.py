@@ -3,8 +3,8 @@ from typing import get_args
 
 import pytest
 
-from ts_zarr.constants import INNER_CHUNK_SAMPLES, TARGET_SHARD_BYTES
-from ts_zarr.types import ChannelKind, ChunkShard, LevelPlan, WriteOpts
+from timeseries_zarr.constants import INNER_CHUNK_SAMPLES, TARGET_SHARD_BYTES
+from timeseries_zarr.types import ChannelKind, ChunkShard, LevelPlan, WriteOpts
 
 
 def test_construction_stores_fields():

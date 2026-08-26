@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from ts_zarr.config import Config, load_config
-from ts_zarr.types import WriteOpts
+from timeseries_zarr.config import Config, load_config
+from timeseries_zarr.types import WriteOpts
 
 
 def test_two_positionals_populate_paths():

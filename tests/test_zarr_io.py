@@ -4,7 +4,7 @@ import numpy as np
 from zarr import Group
 from zarr.codecs import ShardingCodec, ZstdCodec
 
-from ts_zarr.zarr_io import (
+from timeseries_zarr.zarr_io import (
     consolidate,
     create_array,
     create_group_with_attrs,

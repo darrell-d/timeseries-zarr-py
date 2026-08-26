@@ -1,4 +1,4 @@
-from ts_zarr.constants import UNIT_TO_UV
+from timeseries_zarr.constants import UNIT_TO_UV
 
 
 def test_unit_to_uv_factors():

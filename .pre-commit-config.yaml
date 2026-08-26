@@ -9,5 +9,5 @@ repos:
     rev: v2.3.0
     hooks:
       - id: mypy
-        files: ^ts_zarr/
+        files: ^timeseries_zarr/
         additional_dependencies: [numpy, "zarr==3.3.0"]

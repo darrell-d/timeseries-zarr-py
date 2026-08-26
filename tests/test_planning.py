@@ -1,6 +1,6 @@
 import pytest
 
-from ts_zarr.planning import (
+from timeseries_zarr.planning import (
     level_count,
     level_num_bins,
     level_period_us,

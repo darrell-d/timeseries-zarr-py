@@ -8,7 +8,7 @@ from pynwb.testing.mock.device import mock_Device
 from pynwb.testing.mock.ecephys import mock_ElectricalSeries
 from pynwb.testing.mock.file import mock_NWBFile
 
-from ts_zarr.nwb_reader import (
+from timeseries_zarr.nwb_reader import (
     NwbContinuousSource,
     NwbUnitSource,
     build_sources_from_nwb,
