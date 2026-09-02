@@ -50,7 +50,9 @@ def create_array(
     The outer shard is shard_shape, split into inner chunks of chunk_shape by
     the ZEP2 sharding codec; chunk_shape must divide shard_shape along each
     axis. The inner chunks are Zstd-compressed at zstd_level. attrs lands in
-    the array's zarr.json verbatim and unprefixed.
+    the array's zarr.json verbatim and unprefixed. Every shard written to the
+    array reaches disk, including a shard whose values all equal the fill
+    value, so a reader never meets a missing shard key.
     """
     return group.create_array(
         name=name,
@@ -60,6 +62,7 @@ def create_array(
         shards=shard_shape,
         compressors=ZstdCodec(level=zstd_level),
         attributes=cast("dict[str, JSON]", attrs),
+        config={"write_empty_chunks": True},
     )
 
 

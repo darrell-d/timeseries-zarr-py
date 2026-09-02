@@ -156,6 +156,12 @@ the reader pulls byte ranges out of it. Reading a shard starts with reading its 
 from the end of the file. A store should ask for a suffix range instead of issuing a HEAD
 to learn the object size followed by an absolute-offset GET.
 
+Every shard of every level is present on disk. A shard whose bins all equal the fill
+value is still written, so a reader never meets a missing key. An object store that
+answers a missing key with an authorization error instead of a not-found status would
+otherwise turn an all-zero channel into a failed read. A reader that does meet a missing
+shard reads the fill value, which is indistinguishable from recorded zeros.
+
 `float32` is the dtype throughout. A viewer quantizes to canvas pixels, so the extra
 precision of `float64` reaches no screen and costs twice the storage.
 

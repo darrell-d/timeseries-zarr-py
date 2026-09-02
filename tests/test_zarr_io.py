@@ -152,6 +152,34 @@ def test_write_region_multiple_regions_tile_full_array(tmp_path):
     assert np.array_equal(open_group(path)["lvl"][:], full)
 
 
+def _shard_files(path, name):
+    """Return the shard files under the array named name, newest key last."""
+    return sorted(
+        f.relative_to(path).as_posix()
+        for f in (path / name).rglob("*")
+        if f.is_file() and f.name != "zarr.json"
+    )
+
+
+def test_create_array_writes_all_fill_shards_rank1(tmp_path):
+    path = tmp_path / "bundle"
+    arr = create_array(
+        open_group(path), "lvl", (12,), np.float32, (4,), (8,), {}, 5
+    )
+    write_region(arr, 0, np.zeros(8, dtype=np.float32))
+    write_region(arr, 8, np.zeros(4, dtype=np.float32))
+    assert _shard_files(path, "lvl") == ["lvl/c/0", "lvl/c/1"]
+
+
+def test_create_array_writes_all_fill_shard_rank2(tmp_path):
+    path = tmp_path / "bundle"
+    arr = create_array(
+        open_group(path), "lvl", (6, 2), np.float32, (4, 2), (8, 2), {}, 5
+    )
+    write_region(arr, 0, np.zeros((6, 2), dtype=np.float32))
+    assert _shard_files(path, "lvl") == ["lvl/c/0/0"]
+
+
 def _build_tree(path):
     root = open_group(path)
     child = create_group_with_attrs(root, "0", {"kind": "continuous"})

@@ -275,6 +275,26 @@ def test_write_continuous_channel_empty_source_writes_empty_level0(
     assert grp["0"].shape == (0,)
 
 
+def test_write_continuous_channel_all_zero_source_writes_every_shard(
+    tmp_path, continuous_source
+):
+    samples = np.zeros(64, dtype=np.float32)
+    parent = open_group(tmp_path / "bundle")
+    write_continuous_channel(
+        parent, 0, continuous_source(samples), opts=_MULTI_OPTS
+    )
+    grp = open_group(tmp_path / "bundle")["0"]
+    assert len(list(grp.array_keys())) >= 3
+    for key in grp.array_keys():
+        level_dir = tmp_path / "bundle" / "0" / key
+        shard_files = [
+            f
+            for f in level_dir.rglob("*")
+            if f.is_file() and f.name != "zarr.json"
+        ]
+        assert shard_files, f"level {key} has no shard file"
+
+
 def test_write_continuous_channel_returns_none(tmp_path, continuous_source):
     samples = np.arange(64, dtype=np.float32)
     parent = open_group(tmp_path / "bundle")
