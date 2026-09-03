@@ -1,6 +1,6 @@
 [project]
 name = "timeseries-zarr-py"
-version = "0.1.0"
+version = "0.3.0"
 description = "Producer for pyramid Zarr v3 viewer bundles from neurophysiology time series"
 requires-python = ">=3.12"
 dependencies = [
