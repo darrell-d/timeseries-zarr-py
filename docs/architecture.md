@@ -12,8 +12,10 @@ one channel's metadata and windowed reads (`read_samples`, `read_events`, and th
 protocols, not on NWB. The core is testable against in-memory sources, and a second input
 format costs one new adapter and no changes elsewhere.
 
-`nwb_reader.py` also normalizes continuous samples to microvolts, so every continuous
-channel reaching the writer is already in the unit the bundle promises. Unit-channel
+`nwb_reader.py` holds two continuous adapters. `NwbContinuousSource` reads one column of
+an `ElectricalSeries` and normalizes it to microvolts. `NwbTimeSeriesSource` reads one
+column of any other numeric `TimeSeries` in the acquisition, normalized to microvolts
+when its unit is in the volts family and kept in its own unit otherwise. Unit-channel
 waveforms carry no unit metadata in NWB and are stored unscaled.
 
 ## Decision layer

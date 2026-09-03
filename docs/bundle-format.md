@@ -84,8 +84,9 @@ coarser levels.
 The pyramid costs about 1.67x the raw size. Each level above raw stores a pair, so the
 series `N + 2 * (N/4 + N/16 + ...)` sums to `5N/3`.
 
-Samples are stored in microvolts. Sample index `i` at level `L` starts at wall-clock
-`start_us + i * period_us(L)`. No time axis is stored.
+Voltage samples are stored in microvolts. A channel recorded in any other unit keeps
+that unit, and the channel group's `unit` names it. Sample index `i` at level `L` starts
+at wall-clock `start_us + i * period_us(L)`. No time axis is stored.
 
 ## Unit channels
 
@@ -123,7 +124,7 @@ Each channel group carries six keys:
 | `start_us` | int64 | wall-clock microseconds of sample 0, or of the recording start |
 | `kind` | string | `continuous` or `unit` |
 | `name` | string | display label |
-| `unit` | string | physical unit of the stored samples, always `uV` |
+| `unit` | string | physical unit of the stored samples: `uV` for a voltage channel, otherwise the source unit verbatim |
 
 Each pyramid level array and each `waveforms` array carries one key:
 
