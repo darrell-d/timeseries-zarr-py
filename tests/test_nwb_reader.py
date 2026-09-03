@@ -3,13 +3,17 @@ from datetime import UTC, datetime
 import numpy as np
 import pytest
 from hdmf.common import DynamicTableRegion
+from pynwb import TimeSeries
+from pynwb.ecephys import ElectricalSeries
 from pynwb.misc import Units
+from pynwb.testing.mock.base import mock_TimeSeries
 from pynwb.testing.mock.device import mock_Device
 from pynwb.testing.mock.ecephys import mock_ElectricalSeries
 from pynwb.testing.mock.file import mock_NWBFile
 
 from timeseries_zarr.nwb_reader import (
     NwbContinuousSource,
+    NwbTimeSeriesSource,
     NwbUnitSource,
     build_sources_from_nwb,
 )
@@ -397,4 +401,182 @@ def test_build_module_units_without_series_rate_raises():
     nwb = mock_NWBFile()
     _add_units_to_module(nwb, "ecephys", _make_units(_TWO_UNITS, name="sorted"))
     with pytest.raises(ValueError):
+        build_sources_from_nwb(nwb)
+
+
+def _one_channel_series(data, *, rate=30000.0):
+    """Build a rank-1 ElectricalSeries wired to one electrode, in a new file."""
+    nwb = mock_NWBFile()
+    device = mock_Device(nwbfile=nwb)
+    group = nwb.create_electrode_group(
+        name="grp", description="d", location="loc", device=device
+    )
+    nwb.add_electrode(group=group, location="loc")
+    region = DynamicTableRegion(
+        name="electrodes", data=[0], description="r", table=nwb.electrodes
+    )
+    series = ElectricalSeries(
+        name="single",
+        data=np.asarray(data),
+        electrodes=region,
+        rate=rate,
+        starting_time=0.0,
+    )
+    nwb.add_acquisition(series)
+    return nwb, series
+
+
+def test_continuous_reads_a_rank_one_series_as_one_channel():
+    nwb, es = _one_channel_series(np.arange(8, dtype=np.float64))
+    src = NwbContinuousSource(es, 0, STARTED)
+    assert src.num_samples() == 8
+    assert np.array_equal(
+        src.read_samples(2, 5), (np.arange(2, 5) * 1e6).astype(np.float32)
+    )
+    continuous, _ = build_sources_from_nwb(nwb)
+    assert len(continuous) == 1
+
+
+def test_continuous_rejects_a_series_sampled_by_timestamps():
+    es = mock_ElectricalSeries(
+        data=np.zeros((10, 2)), timestamps=np.arange(10) / 512.0
+    )
+    with pytest.raises(ValueError, match="irregular sampling"):
+        NwbContinuousSource(es, 0, STARTED)
+
+
+def test_timeseries_source_keeps_a_unit_outside_the_volts_family():
+    ts = mock_TimeSeries(
+        name="SpO2",
+        data=np.arange(10, dtype=np.float64),
+        unit="%",
+        rate=512.0,
+        conversion=2.0,
+        offset=1.0,
+    )
+    src = NwbTimeSeriesSource(ts, 0, STARTED)
+    assert src.id == "SpO2"
+    assert src.name == "SpO2"
+    assert src.unit == "%"
+    assert src.rate_hz() == 512.0
+    assert src.num_samples() == 10
+    assert src.start_us() == round(STARTED.timestamp() * 1_000_000)
+    expected = (np.arange(4) * 2.0 + 1.0).astype(np.float32)
+    assert np.array_equal(src.read_samples(0, 4), expected)
+    assert src.read_samples(0, 4).dtype == np.float32
+
+
+def test_timeseries_source_normalizes_a_volts_family_unit_to_microvolts():
+    ts = mock_TimeSeries(
+        name="aux", data=np.arange(10, dtype=np.float64), unit="mV", rate=512.0
+    )
+    src = NwbTimeSeriesSource(ts, 0, STARTED)
+    assert src.unit == "uV"
+    assert np.array_equal(
+        src.read_samples(0, 3), (np.arange(3) * 1e3).astype(np.float32)
+    )
+
+
+def test_timeseries_source_names_the_columns_of_a_rank_two_series():
+    data = np.arange(20, dtype=np.float64).reshape(10, 2)
+    ts = mock_TimeSeries(name="resp", data=data, unit="cmH2O", rate=512.0)
+    first = NwbTimeSeriesSource(ts, 0, STARTED)
+    second = NwbTimeSeriesSource(ts, 1, STARTED)
+    assert (first.id, second.id) == ("resp/0", "resp/1")
+    assert np.array_equal(
+        second.read_samples(0, 3), data[0:3, 1].astype(np.float32)
+    )
+
+
+def test_timeseries_source_rejects_a_series_sampled_by_timestamps():
+    ts = mock_TimeSeries(
+        name="irregular",
+        data=np.zeros(10),
+        unit="%",
+        timestamps=np.arange(10) / 512.0,
+    )
+    with pytest.raises(ValueError, match="irregular sampling"):
+        NwbTimeSeriesSource(ts, 0, STARTED)
+
+
+def test_timeseries_source_rejects_data_above_rank_two():
+    ts = mock_TimeSeries(
+        name="video", data=np.zeros((4, 2, 2)), unit="n/a", rate=1.0
+    )
+    with pytest.raises(ValueError, match="rank"):
+        NwbTimeSeriesSource(ts, 0, STARTED)
+
+
+def test_build_yields_plain_series_columns_after_electrical_series_columns():
+    nwb = mock_NWBFile()
+    mock_ElectricalSeries(nwbfile=nwb, data=np.zeros((10, 2)), rate=512.0)
+    mock_TimeSeries(
+        name="SpO2", nwbfile=nwb, data=np.zeros(10), unit="%", rate=512.0
+    )
+    mock_TimeSeries(
+        name="resp",
+        nwbfile=nwb,
+        data=np.zeros((10, 2)),
+        unit="cmH2O",
+        rate=512.0,
+    )
+    continuous, _ = build_sources_from_nwb(nwb)
+    assert [src.id for src in continuous] == [
+        "0",
+        "1",
+        "SpO2",
+        "resp/0",
+        "resp/1",
+    ]
+    assert [src.unit for src in continuous] == [
+        "uV",
+        "uV",
+        "%",
+        "cmH2O",
+        "cmH2O",
+    ]
+
+
+def test_build_skips_a_series_that_is_not_numeric_samples(caplog):
+    nwb = mock_NWBFile()
+    mock_ElectricalSeries(nwbfile=nwb, data=np.zeros((10, 2)), rate=512.0)
+    nwb.add_acquisition(
+        TimeSeries(name="notes", data=["a", "b"], unit="n/a", rate=1.0)
+    )
+    mock_TimeSeries(
+        name="video",
+        nwbfile=nwb,
+        data=np.zeros((4, 2, 2)),
+        unit="n/a",
+        rate=1.0,
+    )
+    with caplog.at_level("WARNING"):
+        continuous, _ = build_sources_from_nwb(nwb)
+    assert [src.id for src in continuous] == ["0", "1"]
+    skipped = [record.getMessage() for record in caplog.records]
+    assert any("notes" in message for message in skipped)
+    assert any("video" in message for message in skipped)
+
+
+def test_build_rejects_two_sources_with_one_id():
+    nwb = mock_NWBFile()
+    mock_ElectricalSeries(nwbfile=nwb, data=np.zeros((10, 2)), rate=512.0)
+    mock_TimeSeries(
+        name="0", nwbfile=nwb, data=np.zeros(10), unit="%", rate=512.0
+    )
+    with pytest.raises(ValueError, match="duplicate channel id '0'"):
+        build_sources_from_nwb(nwb)
+
+
+def test_build_reports_a_series_sampled_by_timestamps():
+    nwb = mock_NWBFile()
+    mock_ElectricalSeries(nwbfile=nwb, data=np.zeros((10, 2)), rate=512.0)
+    mock_TimeSeries(
+        name="irregular",
+        nwbfile=nwb,
+        data=np.zeros(10),
+        unit="%",
+        timestamps=np.arange(10) / 512.0,
+    )
+    with pytest.raises(ValueError, match="irregular sampling.*irregular"):
         build_sources_from_nwb(nwb)
