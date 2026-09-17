@@ -18,6 +18,10 @@ column of any other numeric `TimeSeries` in the acquisition, normalized to micro
 when its unit is in the volts family and kept in its own unit otherwise. Unit-channel
 waveforms carry no unit metadata in NWB and are stored unscaled.
 
+Both reject a series sampled by timestamps rather than a rate. A third adapter presenting
+a gapped recording as a uniform grid is planned; see
+[gapped recordings](./gapped-recordings.md).
+
 ## Decision layer
 
 `planning.py` and `sizing.py` are pure functions with no I/O. `planning.py` decides how
