@@ -15,52 +15,22 @@ from timeseries_zarr.constants import (
     MICROSECONDS_PER_SECOND,
     UNIT_TO_UV,
 )
+from timeseries_zarr.grid import derive_rate_hz
+from timeseries_zarr.nwb_series import (
+    channel_count,
+    electrode_id,
+    electrode_name,
+    read_column,
+    read_uv,
+    require_rate,
+    start_us,
+)
+from timeseries_zarr.nwb_timestamped import NwbTimestampedSource
 
 logger = logging.getLogger(__name__)
 
 MAX_SERIES_RANK = 2
 """Highest data rank a series can have and still be read as channels."""
-
-
-def _require_rate(series: TimeSeries) -> float:
-    """Return the series' sample rate in hertz, raising for a timestamps-only series."""
-    if series.rate is None:
-        raise ValueError(
-            f"irregular sampling is not supported: {series.name} has "
-            "timestamps and no rate"
-        )
-    return float(series.rate)
-
-
-def _start_us(series: TimeSeries, session_start_time: datetime) -> int:
-    """Return wall-clock microseconds of sample 0, rounded to whole microseconds."""
-    start_s: float = session_start_time.timestamp() + float(
-        series.starting_time
-    )
-    return round(start_s * MICROSECONDS_PER_SECOND)
-
-
-def _read_column(
-    series: TimeSeries, channel_index: int, start: int, stop: int
-) -> npt.NDArray[np.float64]:
-    """Return one channel's [start, stop) window as float64.
-
-    A rank-1 series is its own single channel; a rank-2 series is indexed by
-    column.
-    """
-    data = series.data
-    window = (
-        data[start:stop]
-        if len(data.shape) == 1
-        else data[start:stop, channel_index]
-    )
-    return np.asarray(window, dtype=np.float64)
-
-
-def _channel_count(series: TimeSeries) -> int:
-    """Return the number of channels a rank-1 or rank-2 series holds."""
-    shape = series.data.shape
-    return 1 if len(shape) == 1 else int(shape[1])
 
 
 class NwbContinuousSource:
@@ -82,25 +52,17 @@ class NwbContinuousSource:
         self._series = electrical_series
         self._channel_index = channel_index
         self._session_start_time = session_start_time
-        self._rate_hz = _require_rate(electrical_series)
+        self._rate_hz = require_rate(electrical_series)
 
     @property
     def id(self) -> str:
         """The selected electrode's table id."""
-        electrodes = self._series.electrodes
-        row_index = electrodes.data[self._channel_index]
-        return str(electrodes.table.id[row_index])
+        return electrode_id(self._series, self._channel_index)
 
     @property
     def name(self) -> str:
         """The electrode's channel_name column, then its label, then the id."""
-        electrodes = self._series.electrodes
-        row_index = electrodes.data[self._channel_index]
-        table = electrodes.table
-        for column in ("channel_name", "label"):
-            if column in table.colnames:
-                return str(table[column][row_index])
-        return self.id
+        return electrode_name(self._series, self._channel_index)
 
     @property
     def unit(self) -> str:
@@ -117,7 +79,7 @@ class NwbContinuousSource:
         The session start plus the series' own start offset, rounded to whole
         microseconds.
         """
-        return _start_us(self._series, self._session_start_time)
+        return start_us(self._series, self._session_start_time)
 
     def num_samples(self) -> int:
         """Return the length of the series' time axis, shared by every channel."""
@@ -130,17 +92,7 @@ class NwbContinuousSource:
         unit to microvolts. Raises ValueError if that unit is not a recognized
         volts family. An empty range (stop <= start) yields a length-0 array.
         """
-        column = _read_column(self._series, self._channel_index, start, stop)
-        scaled = column * float(self._series.conversion)
-        if self._series.channel_conversion is not None:
-            scaled = scaled * float(
-                self._series.channel_conversion[self._channel_index]
-            )
-        scaled = scaled + float(self._series.offset)
-        unit = str(self._series.unit).lower()
-        if unit not in UNIT_TO_UV:
-            raise ValueError(f"unsupported ElectricalSeries unit: {unit!r}")
-        return (scaled * UNIT_TO_UV[unit]).astype(np.float32)
+        return read_uv(self._series, self._channel_index, start, stop)
 
 
 class NwbTimeSeriesSource:
@@ -173,7 +125,7 @@ class NwbTimeSeriesSource:
         self._series = series
         self._channel_index = channel_index
         self._session_start_time = session_start_time
-        self._rate_hz = _require_rate(series)
+        self._rate_hz = require_rate(series)
         unit = str(series.unit)
         self._uv_factor = UNIT_TO_UV.get(unit.lower())
         self._unit = unit if self._uv_factor is None else "uV"
@@ -201,7 +153,7 @@ class NwbTimeSeriesSource:
 
     def start_us(self) -> int:
         """Return the wall-clock microseconds of sample index 0."""
-        return _start_us(self._series, self._session_start_time)
+        return start_us(self._series, self._session_start_time)
 
     def num_samples(self) -> int:
         """Return the length of the series' time axis, shared by every channel."""
@@ -214,7 +166,7 @@ class NwbTimeSeriesSource:
         factor when the unit is in the volts family. An empty range
         (stop <= start) yields a length-0 array.
         """
-        column = _read_column(self._series, self._channel_index, start, stop)
+        column = read_column(self._series, self._channel_index, start, stop)
         scaled = column * float(self._series.conversion) + float(
             self._series.offset
         )
@@ -223,7 +175,9 @@ class NwbTimeSeriesSource:
         return scaled.astype(np.float32)
 
 
-type ContinuousSource = NwbContinuousSource | NwbTimeSeriesSource
+type ContinuousSource = (
+    NwbContinuousSource | NwbTimeSeriesSource | NwbTimestampedSource
+)
 
 
 class NwbUnitSource:
@@ -409,6 +363,36 @@ def _require_unique_ids(
         seen.add(source.id)
 
 
+def _electrical_sources(
+    series: ElectricalSeries, session_start_time: datetime
+) -> list[ContinuousSource]:
+    """Return one source per channel of an ElectricalSeries.
+
+    A series carrying a rate is read directly. A series carrying timestamps
+    is a recording with breaks in it, and is placed on a uniform grid at a
+    rate derived from its own first gap-free run; the grid reports NaN where
+    nothing was recorded.
+    """
+    channels = range(channel_count(series))
+    if series.rate is not None:
+        return [
+            NwbContinuousSource(series, index, session_start_time)
+            for index in channels
+        ]
+
+    rate_hz = derive_rate_hz(series.timestamps)
+    logger.info(
+        "%s is sampled by timestamps; gridding at %.6f Hz derived from its "
+        "first gap-free run",
+        series.name,
+        rate_hz,
+    )
+    return [
+        NwbTimestampedSource(series, index, session_start_time, rate_hz=rate_hz)
+        for index in channels
+    ]
+
+
 def build_sources_from_nwb(
     nwbfile: NWBFile,
 ) -> tuple[list[ContinuousSource], list[NwbUnitSource]]:
@@ -430,14 +414,14 @@ def build_sources_from_nwb(
         if isinstance(acq, ElectricalSeries)
     ]
     continuous: list[ContinuousSource] = [
-        NwbContinuousSource(es, channel_index, session_start)
+        source
         for es in series
-        for channel_index in range(_channel_count(es))
+        for source in _electrical_sources(es, session_start)
     ]
     continuous.extend(
         NwbTimeSeriesSource(plain, channel_index, session_start)
         for plain in _iter_plain_series(nwbfile)
-        for channel_index in range(_channel_count(plain))
+        for channel_index in range(channel_count(plain))
     )
 
     units: list[NwbUnitSource] = []

@@ -1,6 +1,6 @@
 # Gapped recordings
 
-Planned change, not yet built.
+How the writer handles a recording with breaks in it.
 
 ## What fails today
 
@@ -53,9 +53,14 @@ the 17 M slots in between are the eight breaks.
 
 ```
 grid.py               pure. no NWB, no zarr, no I/O.
+nwb_series.py         readers both adapters share
 nwb_timestamped.py    the source adapter
 nwb_reader.py         one branch in build_sources_from_nwb
 ```
+
+`nwb_series.py` exists because the timestamped adapter reads a series exactly as the
+rate-sampled one does; only where a sample sits on the time axis differs. Without it the
+two adapters would have to import each other.
 
 ### `grid.py`
 
@@ -156,12 +161,21 @@ first two million samples of that file it returns 512.0 exactly.
 
 Two conditions fail the run rather than producing a bundle:
 
-- **Two samples landing on the same grid slot.** The rate is too low.
-- **Non-uniform spacing inside a run.** The recording is irregular, not gapped, and
-  quantizing it onto a grid would move samples without saying so.
+- **Two samples landing on the same grid slot.** The rate is too low. This also catches
+  genuinely irregular data, whose jittered intervals collide.
+- **The timestamps implying a different rate than the one given.** The recording is
+  irregular, or the rate is wrong.
 
 A gap needs no threshold once the rate is right: it is a sample whose grid slot is more
 than one past its predecessor.
+
+The second check earns its keep only when the rate comes from outside the timestamps. A
+rate too low is caught by collisions; a rate too *high* is not, because every sample then
+lands two or more slots on, which segmentation alone cannot tell from a recording that is
+nothing but gaps. While `build_sources_from_nwb` derives the rate from the timestamps it
+is comparing a number with itself and always passes. Supplying the rate from the source
+format's header, which MEF carries and the converter currently drops, is what turns it
+into a real cross-check.
 
 ## Tests
 

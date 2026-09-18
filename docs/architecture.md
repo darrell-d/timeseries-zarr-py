@@ -8,25 +8,37 @@ stage reaches back into an earlier one.
 `protocols.py` declares `ContinuousChannelSource` and `UnitChannelSource`. Each exposes
 one channel's metadata and windowed reads (`read_samples`, `read_events`, and the rest).
 
-`nwb_reader.py` is the only concrete adapter. Everything downstream depends on the
-protocols, not on NWB. The core is testable against in-memory sources, and a second input
-format costs one new adapter and no changes elsewhere.
+NWB is the only input format so far. Everything downstream depends on the protocols, not
+on NWB. The core is testable against in-memory sources, and a second input format costs
+one new adapter and no changes elsewhere.
 
-`nwb_reader.py` holds two continuous adapters. `NwbContinuousSource` reads one column of
-an `ElectricalSeries` and normalizes it to microvolts. `NwbTimeSeriesSource` reads one
-column of any other numeric `TimeSeries` in the acquisition, normalized to microvolts
-when its unit is in the volts family and kept in its own unit otherwise. Unit-channel
-waveforms carry no unit metadata in NWB and are stored unscaled.
+`nwb_series.py` holds the readers every adapter shares: the rate and start time of a
+series, one channel's window as float64 or as microvolts, an electrode's id and display
+name. Keeping them here lets each adapter live in its own module without importing
+another.
 
-Both reject a series sampled by timestamps rather than a rate. A third adapter presenting
-a gapped recording as a uniform grid is planned; see
-[gapped recordings](./gapped-recordings.md).
+`nwb_reader.py` holds the rate-sampled adapters and the discovery that picks them.
+`NwbContinuousSource` reads one column of an `ElectricalSeries` and normalizes it to
+microvolts. `NwbTimeSeriesSource` reads one column of any other numeric `TimeSeries` in
+the acquisition, normalized to microvolts when its unit is in the volts family and kept
+in its own unit otherwise. Unit-channel waveforms carry no unit metadata in NWB and are
+stored unscaled. `build_sources_from_nwb` chooses an adapter per series: a rate picks
+these, timestamps pick the one below.
+
+`nwb_timestamped.py` holds `NwbTimestampedSource`, which presents a recording with breaks
+in it as a uniform grid. A series sampled by timestamps rather than a rate is how NWB has
+to express one, since a rate asserts unbroken regularity. The adapter reports the grid's
+length as its sample count and NaN wherever nothing was recorded, so nothing downstream
+needs gap awareness. See [gapped recordings](./gapped-recordings.md).
 
 ## Decision layer
 
-`planning.py` and `sizing.py` are pure functions with no I/O. `planning.py` decides how
-many levels a channel gets and each level's shape and `period_us`. `sizing.py` decides
-the inner chunk and outer shard shapes for one array.
+`planning.py`, `sizing.py` and `grid.py` are pure functions with no I/O. `planning.py`
+decides how many levels a channel gets and each level's shape and `period_us`.
+`sizing.py` decides the inner chunk and outer shard shapes for one array. `grid.py` maps
+a recording's timestamps onto the uniform grid they occupy, returning one row per
+contiguous run rather than per sample, and measures the rate when none is supplied; it
+imports neither NWB nor Zarr.
 
 Keeping these separate from the write path means the format's arithmetic is unit-testable
 without touching a store.
