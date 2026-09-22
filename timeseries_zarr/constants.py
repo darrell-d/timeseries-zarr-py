@@ -5,8 +5,11 @@ from typing import Final
 DECIMATION_FACTOR: Final = 4
 """Samples folded into one bin per pyramid level (4x coarser each level)."""
 
-MAX_LEVELS: Final = 8
-"""Most pyramid levels a bundle can hold: level 0 plus levels 1 through 7."""
+MAX_LEVELS: Final = 7
+"""Most level groups a channel can hold: levels 1 through 7, a 16384x range.
+
+Raw samples are not a level, so this counts only the folded ones.
+"""
 
 ENVELOPE_PAIR_SIZE: Final = 2
 """Length of the trailing (min, max) axis on every coarser pyramid level."""

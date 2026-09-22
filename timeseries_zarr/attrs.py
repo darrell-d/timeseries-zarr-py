@@ -53,10 +53,12 @@ def meta_group_attrs(
     return {"subject": subject, "session": session, "source": source}
 
 
-def level_array_attrs(period_us: float) -> dict[str, object]:
-    """Return the pyramid-level array attributes.
+def level_group_attrs(period_us: float) -> dict[str, object]:
+    """Return the pyramid-level group attributes.
 
-    period_us is the microseconds one bin spans at this level.
+    period_us is the microseconds one bin spans at this level, and the only
+    attribute a level group carries. It sits on the group rather than on a
+    member array because every member of a level shares one bin axis.
     """
     return {"period_us": period_us}
 

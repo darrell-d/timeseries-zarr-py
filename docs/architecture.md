@@ -57,12 +57,22 @@ bounded no matter how long the recording is.
 `write_continuous.py` and `write_unit.py` each write one channel by composing the stages
 above. They hold the per-channel logic and no Zarr specifics.
 
+A continuous channel is the raw samples under `raw/`, then level groups keyed `1/`, `2/`
+and so on, each carrying `period_us` and holding one array per statistic over a shared
+bin axis. `env` is the only statistic so far. Raw is not a level: it carries no bin
+arithmetic and no `period_us`, since the sample period is the channel's `rate_hz`.
+Keeping numeric keys for levels alone is what lets a reader find them without inspecting
+array shapes, and it is why a channel can omit `raw` and still be readable.
+
 Both pick their read block so that every write covers a whole shard. A narrower write
 makes the sharding codec read the shard back, re-encode every inner chunk, and rewrite
 it, which costs about 10x the store traffic on a 16-chunk shard.
 
 `zarr_io.py` is the only module that imports `zarr`. Everything else is Zarr-agnostic, so
-the Zarr v3 API surface this package depends on sits in one file.
+the Zarr v3 API surface this package depends on sits in one file. It takes each array's
+fill value from its dtype, NaN for floats and 0 for integers, rather than from the
+caller: the fill is what Zarr serves for a chunk nobody wrote, and one float array
+created without it would read back as a zero-volt flatline where a gap belongs.
 
 `attrs.py` builds the attribute dicts, the format's only custom surface.
 

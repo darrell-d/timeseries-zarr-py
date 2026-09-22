@@ -5,8 +5,8 @@ from timeseries_zarr.fold import fold_pair_block, fold_raw_block
 from timeseries_zarr.streaming import (
     _rebuffer_and_fold,
     iter_array_blocks,
-    iter_level0_to_level1,
     iter_raw_blocks,
+    iter_raw_to_level1,
 )
 
 
@@ -156,7 +156,7 @@ def test_iter_level0_to_level1_matches_whole_fold(
     continuous_source, block_samples
 ):
     samples = np.arange(50, dtype=np.float32)
-    out = list(iter_level0_to_level1(continuous_source(samples), block_samples))
+    out = list(iter_raw_to_level1(continuous_source(samples), block_samples))
     result = (
         np.concatenate(out, axis=0)
         if out
@@ -167,7 +167,7 @@ def test_iter_level0_to_level1_matches_whole_fold(
 
 def test_iter_level0_to_level1_empty_source_yields_nothing(continuous_source):
     src = continuous_source(np.empty(0, dtype=np.float32))
-    assert list(iter_level0_to_level1(src, 4)) == []
+    assert list(iter_raw_to_level1(src, 4)) == []
 
 
 @pytest.mark.parametrize("block_samples", [0, -1])
@@ -176,7 +176,7 @@ def test_iter_level0_to_level1_rejects_nonpositive_block(
 ):
     src = continuous_source(np.arange(8, dtype=np.float32))
     with pytest.raises(ValueError, match="positive"):
-        list(iter_level0_to_level1(src, block_samples))
+        list(iter_raw_to_level1(src, block_samples))
 
 
 def test_iter_array_blocks_concatenates_to_full_array():

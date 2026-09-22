@@ -31,24 +31,15 @@ class RecordingMeta:
 class LevelPlan:
     """Resolved shape and time resolution of one pyramid level of a channel.
 
-    Level 0 holds raw samples; levels >= 1 hold (min, max) envelopes. period_us
-    is the wall-clock microseconds that one bin spans, widening with each
-    coarser level.
+    Levels are numbered from 1 and hold (min, max) envelopes; raw samples are
+    not a level. period_us is the microseconds one bin spans, widening 4x with
+    each coarser level. shape describes the level's env member, the only one
+    written today; a level group may hold more.
     """
 
     level: int
     shape: tuple[int, ...]
     period_us: float
-
-    @property
-    def is_raw(self) -> bool:
-        """Whether this level holds raw samples rather than min/max envelopes."""
-        return self.level == 0
-
-    @property
-    def name(self) -> str:
-        """Zarr array key for this level: its decimal level number."""
-        return str(self.level)
 
 
 @dataclass(frozen=True, slots=True)

@@ -75,7 +75,7 @@ def iter_raw_blocks(
         yield source.read_samples(start, min(start + block_samples, n))
 
 
-def iter_level0_to_level1(
+def iter_raw_to_level1(
     source: ContinuousChannelSource, block_samples: int
 ) -> Iterator[npt.NDArray[np.float32]]:
     """Yield level-1 (min, max) pairs folded from the source's raw samples.

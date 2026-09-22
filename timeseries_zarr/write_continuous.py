@@ -1,8 +1,10 @@
-"""Compose streaming and zarr I/O to write one continuous channel's levels.
+"""Compose streaming and zarr I/O to write one continuous channel.
 
-Each level writer shapes its array from the plan, takes its chunk and shard
-shapes from sizing, then streams blocks in. An empty input creates the array
-and writes nothing.
+A channel is the raw samples plus a ladder of level groups above them. Raw is
+written first and from the source; each level is folded from the one below,
+level 1 from raw. Every writer shapes its array from the plan, takes its chunk
+and shard shapes from sizing, then streams blocks in. An empty input creates the
+array and writes nothing.
 """
 
 from collections.abc import Iterable
@@ -11,10 +13,10 @@ from typing import cast
 import numpy as np
 import numpy.typing as npt
 
-from timeseries_zarr.attrs import channel_group_attrs, level_array_attrs
+from timeseries_zarr.attrs import channel_group_attrs, level_group_attrs
 from timeseries_zarr.constants import DECIMATION_FACTOR, FLOAT32_BYTES
 from timeseries_zarr.fold import fold_block
-from timeseries_zarr.planning import level0_period_us, plan_levels
+from timeseries_zarr.planning import plan_levels, raw_shape, sample_period_us
 from timeseries_zarr.protocols import ContinuousChannelSource
 from timeseries_zarr.sizing import chunk_and_shard
 from timeseries_zarr.streaming import (
@@ -32,6 +34,12 @@ from timeseries_zarr.zarr_io import (
     write_region,
 )
 
+RAW_KEY = "raw"
+"""Key of the full-resolution sample array within a channel group."""
+
+ENV_KEY = "env"
+"""Key of the (min, max) envelope member within a level group."""
+
 
 def _write_blocks(
     array: ZarrArray, blocks: Iterable[npt.NDArray[np.float32]]
@@ -48,30 +56,26 @@ def _write_blocks(
         start += block.shape[0]
 
 
-def write_level0(
+def write_raw(
     group: ZarrGroup,
     source: ContinuousChannelSource,
-    plan: LevelPlan,
     sizing: ChunkShard,
     zstd_level: int,
 ) -> ZarrArray:
-    """Create the level-0 raw array under group and stream the source into it.
+    """Create the raw array under group and stream the source's samples into it.
 
-    The array is named "0", holds float32, and carries the level period_us as
-    its sole attribute. The source's raw samples are read in shard-sized
-    blocks. Raises ValueError if plan does not describe level 0 (raw).
+    Rank-1 float32 under the key "raw", with no attributes: the sample period is
+    the channel's rate_hz and restating it here would be a second place to keep
+    it right. The source is read in shard-sized blocks.
     """
-    if not plan.is_raw:
-        raise ValueError("plan level must be raw")
-
     array = create_array(
         group,
-        str(plan.level),
-        plan.shape,
+        RAW_KEY,
+        raw_shape(source.num_samples()),
         np.float32,
         sizing.chunk_shape,
         sizing.shard_shape,
-        level_array_attrs(plan.period_us),
+        {},
         zstd_level,
     )
     _write_blocks(array, iter_raw_blocks(source, sizing.shard_shape[0]))
@@ -79,31 +83,35 @@ def write_level0(
 
 
 def write_level_from_previous(
-    group: ZarrGroup,
+    parent: ZarrGroup,
     prev: ZarrArray,
     plan: LevelPlan,
     sizing: ChunkShard,
     zstd_level: int,
 ) -> ZarrArray:
-    """Create the level named plan.level by folding the previous level into it.
+    """Create the level group named plan.level and fold prev into its env member.
 
-    The array is named str(plan.level), holds float32, and carries the level
-    period_us as its sole attribute. prev is read in axis-0 blocks of
+    The group carries period_us and holds one array per statistic over a shared
+    bin axis; env is the only one so far. prev is the array below, raw for
+    level 1 and the level below's env after that, read in axis-0 blocks of
     DECIMATION_FACTOR shards and folded across block boundaries by fold_block,
-    so each folded block fills one shard of the new array. Raises ValueError if
-    plan describes level 0.
+    so each folded block fills one shard. Returns the env array, which the next
+    level folds from. Raises ValueError if plan describes a level below 1.
     """
-    if plan.is_raw:
-        raise ValueError("level must not be raw")
+    if plan.level < 1:
+        raise ValueError("levels are numbered from 1; raw is not a level")
 
+    group = create_group_with_attrs(
+        parent, str(plan.level), level_group_attrs(plan.period_us)
+    )
     array = create_array(
         group,
-        str(plan.level),
+        ENV_KEY,
         plan.shape,
         np.float32,
         sizing.chunk_shape,
         sizing.shard_shape,
-        level_array_attrs(plan.period_us),
+        {},
         zstd_level,
     )
 
@@ -131,10 +139,10 @@ def write_continuous_channel(
     """Write one continuous channel as the subgroup named str(index).
 
     Creates the channel group under parent carrying its continuous-kind
-    attributes, then writes level 0 from the source and folds each coarser
-    level from the one written below it. The pyramid is planned from the
-    source's sample count and rate; every level array is sized and compressed
-    per opts.
+    attributes, writes the raw samples, then folds each level from the one
+    written below it. The pyramid is planned from the source's sample count and
+    rate; every array is sized and compressed per opts. A channel too short to
+    fill one level gets raw and nothing else.
 
     onset_us is the bundle's onset in wall-clock microseconds. The channel
     records its distance from it, not its own wall-clock start: no absolute
@@ -149,32 +157,32 @@ def write_continuous_channel(
         source.unit,
     )
     group = create_group_with_attrs(parent, str(index), attributes)
-    previous = None
-    for plan in plan_levels(
-        source.num_samples(),
-        level0_period_us(source.rate_hz()),
-        opts.max_levels,
-        opts.min_bins,
-    ):
-        sizing = chunk_and_shard(
-            level_shape=plan.shape,
+
+    def _sizing(shape: tuple[int, ...]) -> ChunkShard:
+        return chunk_and_shard(
+            level_shape=shape,
             dtype_size=FLOAT32_BYTES,
             inner_len=opts.inner_len,
             target_shard_bytes=opts.target_shard_bytes,
         )
-        if previous is None:
-            previous = write_level0(
-                group=group,
-                source=source,
-                plan=plan,
-                sizing=sizing,
-                zstd_level=opts.zstd_level,
-            )
-        else:
-            previous = write_level_from_previous(
-                group=group,
-                prev=previous,
-                plan=plan,
-                sizing=sizing,
-                zstd_level=opts.zstd_level,
-            )
+
+    num_samples = source.num_samples()
+    previous = write_raw(
+        group=group,
+        source=source,
+        sizing=_sizing(raw_shape(num_samples)),
+        zstd_level=opts.zstd_level,
+    )
+    for plan in plan_levels(
+        num_samples,
+        sample_period_us(source.rate_hz()),
+        opts.max_levels,
+        opts.min_bins,
+    ):
+        previous = write_level_from_previous(
+            parent=group,
+            prev=previous,
+            plan=plan,
+            sizing=_sizing(plan.shape),
+            zstd_level=opts.zstd_level,
+        )

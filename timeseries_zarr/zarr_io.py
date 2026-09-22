@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
+import numpy as np
 import numpy.typing as npt
 import zarr
 from zarr import Array, Group
@@ -36,6 +37,11 @@ def create_group_with_attrs(
     return parent.create_group(name, attributes=attrs)
 
 
+def _fill_value(dtype: npt.DTypeLike) -> float | int:
+    """Return the fill an unwritten chunk of this dtype reads back as."""
+    return float("nan") if np.issubdtype(np.dtype(dtype), np.floating) else 0
+
+
 def create_array(
     group: Group,
     name: str,
@@ -54,6 +60,12 @@ def create_array(
     the array's zarr.json verbatim and unprefixed. Every shard written to the
     array reaches disk, including a shard whose values all equal the fill
     value, so a reader never meets a missing shard key.
+
+    A float array declares NaN as its fill value and an integer array 0. The
+    fill is what Zarr serves for a chunk nobody wrote, and the format defines
+    NaN as no data. Taking it from the dtype rather than from a caller is
+    deliberate: zarr-python defaults to 0.0, so one float array created
+    without it would read back as a zero-volt flatline where a gap belongs.
     """
     return group.create_array(
         name=name,
@@ -63,6 +75,7 @@ def create_array(
         shards=shard_shape,
         compressors=ZstdCodec(level=zstd_level),
         attributes=cast("dict[str, JSON]", attrs),
+        fill_value=_fill_value(dtype),
         config={"write_empty_chunks": True},
     )
 

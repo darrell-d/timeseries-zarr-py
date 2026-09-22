@@ -207,7 +207,7 @@ def test_deleting_meta_leaves_a_readable_bundle(tmp_path, continuous_source):
     (bundle / "meta").rmdir()
 
     root = open_group(bundle)
-    assert np.array_equal(root["0"]["0"][:], samples)
+    assert np.array_equal(root["0"]["raw"][:], samples)
     assert dict(root["0"].attrs)["offset_us"] == 0
 
 
