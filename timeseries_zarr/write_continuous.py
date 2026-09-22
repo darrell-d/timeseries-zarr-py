@@ -3,7 +3,7 @@
 A channel is the raw samples plus a ladder of level groups above them. Raw is
 written first and from the source; each level is folded from the one below,
 level 1 from raw. A level group holds one array per statistic over a shared bin
-axis: env and mean today.
+axis: env, mean and valid today.
 
 The fold carries every statistic in one stream of stat blocks and the write
 splits that stream into its member arrays, so raw is read once no matter how
@@ -24,6 +24,7 @@ from timeseries_zarr.constants import (
     MAX_COL,
     MEAN_COL,
     MIN_COL,
+    VALID_COL,
 )
 from timeseries_zarr.fold import fold_block
 from timeseries_zarr.planning import plan_levels, raw_shape, sample_period_us
@@ -54,6 +55,9 @@ ENV_KEY = "env"
 MEAN_KEY = "mean"
 """Key of the per-bin mean member within a level group."""
 
+VALID_KEY = "valid"
+"""Key of the per-bin finite-sample count within a level group."""
+
 
 def _write_blocks(
     array: ZarrArray, blocks: Iterable[npt.NDArray[np.float32]]
@@ -73,14 +77,15 @@ def _write_blocks(
 def _write_stat_blocks(
     env: ZarrArray,
     mean: ZarrArray,
+    valid: ZarrArray,
     blocks: Iterable[npt.NDArray[np.float64]],
 ) -> None:
     """Split a stream of stat blocks across a level's member arrays.
 
-    Both members share the block's row offset, which is why they are sized from
-    one row geometry: a mean row is half an env row, so sizing them
-    independently would put the two arrays on different shard boundaries and
-    only one of them could be written a whole shard at a time.
+    Every member shares the block's row offset, which is why they are sized
+    from one row geometry: a mean row is half an env row and a valid row half
+    of that, so sizing them independently would put the arrays on different
+    shard boundaries and only one could be written a whole shard at a time.
     """
     start = 0
     for block in blocks:
@@ -89,6 +94,7 @@ def _write_stat_blocks(
             env, start, block[:, MIN_COL : MAX_COL + 1].astype(np.float32)
         )
         write_region(mean, start, block[:, MEAN_COL].astype(np.float32))
+        write_region(valid, start, block[:, VALID_COL].astype(np.uint16))
         start += rows
 
 
@@ -125,12 +131,12 @@ def write_level(
     plan: LevelPlan,
     sizing: ChunkShard,
     zstd_level: int,
-) -> tuple[ZarrArray, ZarrArray]:
+) -> tuple[ZarrArray, ZarrArray, ZarrArray]:
     """Create the level group named plan.level and stream stat blocks into it.
 
     The group carries period_us and holds one array per statistic over a shared
-    bin axis. Returns (env, mean), which the next level folds from. Raises
-    ValueError if plan describes a level below 1.
+    bin axis. Returns (env, mean, valid), which the next level folds from.
+    Raises ValueError if plan describes a level below 1.
     """
     if plan.level < 1:
         raise ValueError("levels are numbered from 1; raw is not a level")
@@ -158,8 +164,18 @@ def write_level(
         {},
         zstd_level,
     )
-    _write_stat_blocks(env, mean, blocks)
-    return env, mean
+    valid = create_array(
+        group,
+        VALID_KEY,
+        (plan.shape[0],),
+        np.uint16,
+        (sizing.chunk_shape[0],),
+        (sizing.shard_shape[0],),
+        {},
+        zstd_level,
+    )
+    _write_stat_blocks(env, mean, valid, blocks)
+    return env, mean, valid
 
 
 def write_continuous_channel(
@@ -213,7 +229,7 @@ def write_continuous_channel(
         zstd_level=opts.zstd_level,
     )
 
-    previous: tuple[ZarrArray, ZarrArray, int] | None = None
+    previous: tuple[ZarrArray, ZarrArray, ZarrArray, int] | None = None
     for plan in plan_levels(
         num_samples,
         sample_period_us(source.rate_hz()),
@@ -231,19 +247,20 @@ def write_continuous_channel(
                 )
             )
         else:
-            prev_env, prev_mean, prev_level = previous
+            prev_env, prev_mean, prev_valid, prev_level = previous
             below = iter_level_stat_blocks(
                 cast("BlockReadableArray", prev_env),
                 cast("BlockReadableArray", prev_mean),
+                cast("BlockReadableArray", prev_valid),
                 num_samples,
                 prev_level,
                 read_len,
             )
-        env, mean = write_level(
+        env, mean, valid = write_level(
             parent=group,
             blocks=_rebuffer_and_fold(below, fold_block),
             plan=plan,
             sizing=sizing,
             zstd_level=opts.zstd_level,
         )
-        previous = (env, mean, plan.level)
+        previous = (env, mean, valid, plan.level)

@@ -13,6 +13,7 @@ from timeseries_zarr.constants import (
     MEAN_COL,
     MIN_COL,
     STAT_COLUMNS,
+    VALID_COL,
 )
 from timeseries_zarr.fold import fold_raw_block
 from timeseries_zarr.planning import bin_counts
@@ -136,15 +137,17 @@ def iter_offset_removed_blocks(
 def iter_level_stat_blocks(
     env: BlockReadableArray,
     mean: BlockReadableArray,
+    valid: BlockReadableArray,
     num_samples: int,
     level: int,
     block_len: int,
 ) -> Iterator[npt.NDArray[np.float64]]:
     """Yield a level already on disk as the stat blocks that fold the next one.
 
-    Reassembles what the write narrowed: env and mean come back from their
-    arrays and the counts are rebuilt from the plan, since a bin's time support
-    is fixed by its level. Raises ValueError if block_len is not positive.
+    Reassembles what the write narrowed. env, mean and valid come back from
+    their arrays; only the count is rebuilt, because a bin's time support is
+    fixed by its level while how much of it was finite is not. Raises
+    ValueError if block_len is not positive.
     """
     if block_len <= 0:
         raise ValueError("block_len must be positive")
@@ -155,4 +158,5 @@ def iter_level_stat_blocks(
         out[:, MIN_COL : MAX_COL + 1] = env[start:stop]
         out[:, MEAN_COL] = mean[start:stop]
         out[:, COUNT_COL] = bin_counts(num_samples, level, start, stop)
+        out[:, VALID_COL] = valid[start:stop]
         yield out

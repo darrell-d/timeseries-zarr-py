@@ -48,13 +48,17 @@ without touching a store.
 `fold.py` reduces one level to the next over disjoint blocks of 4. See
 [the format spec](https://github.com/Pennsieve/timeseries-zarr-paper/blob/main/bundle-format.md) for the exact rule and the NaN behavior.
 
-A folded level travels as one float64 array of four columns: min, max, mean, and the
-count of raw samples behind the bin. One array is what lets the streaming machinery carry
+A folded level travels as one float64 array of five columns: min, max, mean, the count of
+raw samples behind the bin, and how many of those were finite. One array is what lets the streaming machinery carry
 every statistic in a single pass without knowing what the columns mean, so raw is read
-once however many statistics a level holds. Only the first three reach disk. The count is
-there because a trailing partial bin holds fewer than 4 samples and a plain mean of means
-would over-weight it; when a level is read back to fold the next one, the counts are
-rebuilt by `planning.bin_counts` rather than stored.
+once however many statistics a level holds.
+
+The count and the valid column are different numbers and both are needed. Count is time
+support, the slots a bin spans, and it exists because a trailing partial bin holds fewer
+than 4 samples and a plain mean of means would over-weight it. It is the one column that
+never reaches disk: a level read back rebuilds it with `planning.bin_counts` from its own
+number. Valid is how many of those slots held a finite sample, which is data rather than
+arithmetic, so it is written and read back like the rest.
 
 The arithmetic is float64 and narrows to float32 at the write. A mean is a sum, and
 summing thousands of samples of a signal riding on a large DC offset is where float32
@@ -73,9 +77,10 @@ above. They hold the per-channel logic and no Zarr specifics.
 
 A continuous channel is the raw samples under `raw/`, then level groups keyed `1/`, `2/`
 and so on, each carrying `period_us` and holding one array per statistic over a shared
-bin axis: `env` and `mean` today. Both are sized from one row geometry, because a mean
-row is half an env row and sizing them apart would put them on different shard
-boundaries, where only one could be written a whole shard at a time. Raw is not a level:
+bin axis: `env`, `mean` and `valid` today. All three are sized from one row geometry,
+because a mean row is half an env row and a valid row half of that, and sizing them apart
+would put them on different shard boundaries, where only one could be written a whole
+shard at a time. Raw is not a level:
 it carries no bin
 arithmetic and no `period_us`, since the sample period is the channel's `rate_hz`.
 Keeping numeric keys for levels alone is what lets a reader find them without inspecting

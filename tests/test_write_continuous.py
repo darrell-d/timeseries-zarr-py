@@ -5,7 +5,12 @@ import pytest
 from zarr import Array
 
 from timeseries_zarr.attrs import channel_group_attrs
-from timeseries_zarr.constants import MAX_COL, MEAN_COL, MIN_COL
+from timeseries_zarr.constants import (
+    MAX_COL,
+    MEAN_COL,
+    MIN_COL,
+    VALID_COL,
+)
 from timeseries_zarr.fold import fold_block, fold_raw_block, fold_stat_block
 from timeseries_zarr.planning import plan_levels
 from timeseries_zarr.streaming import (
@@ -116,6 +121,11 @@ def _mean(block):
     return block[:, MEAN_COL].astype(np.float32)
 
 
+def _valid(block):
+    """The valid column of a stat block, as it reaches disk."""
+    return block[:, VALID_COL].astype(np.uint16)
+
+
 def test_write_level_folds_raw_into_env_and_mean(tmp_path):
     data = np.arange(20, dtype=np.float32)
     group = open_group(tmp_path / "bundle")
@@ -145,10 +155,22 @@ def test_write_level_folds_a_level_into_the_next(tmp_path):
         5,
     )
     write_region(mean_arr, 0, _mean(below))
+    valid_arr = create_array(
+        group,
+        "prev_valid",
+        (below.shape[0],),
+        np.uint16,
+        (below.shape[0],),
+        (below.shape[0],),
+        {},
+        5,
+    )
+    write_region(valid_arr, 0, _valid(below))
 
     plan, sizing = _fold_plan(2, below.shape[0], 4)
     blocks = _rebuffer_and_fold(
-        iter_level_stat_blocks(env_arr, mean_arr, 52, 1, 1024), fold_block
+        iter_level_stat_blocks(env_arr, mean_arr, valid_arr, 52, 1, 1024),
+        fold_block,
     )
     write_level(group, blocks, plan, sizing, 5)
 
@@ -156,6 +178,7 @@ def test_write_level_folds_a_level_into_the_next(tmp_path):
     expected = fold_stat_block(below)
     assert np.array_equal(level["env"][:], _env(expected))
     assert np.allclose(level["mean"][:], _mean(expected))
+    assert np.array_equal(level["valid"][:], _valid(expected))
 
 
 @pytest.mark.parametrize("chunk0", [1, 3, 4, 5, 7, 16, 1000])
@@ -180,17 +203,21 @@ def test_write_level_sets_period_us_on_the_group(tmp_path):
     assert dict(level.attrs) == {"period_us": 125.0}
     assert dict(level["env"].attrs) == {}
     assert dict(level["mean"].attrs) == {}
+    assert dict(level["valid"].attrs) == {}
 
 
-def test_write_level_returns_both_members(tmp_path):
+def test_write_level_returns_every_member(tmp_path):
     data = np.arange(20, dtype=np.float32)
     group = open_group(tmp_path / "bundle")
     plan, sizing = _fold_plan(1, data.shape[0], 4)
-    env, mean = write_level(group, _raw_blocks(group, data), plan, sizing, 5)
-    assert isinstance(env, Array)
-    assert isinstance(mean, Array)
+    env, mean, valid = write_level(
+        group, _raw_blocks(group, data), plan, sizing, 5
+    )
+    assert all(isinstance(a, Array) for a in (env, mean, valid))
     assert env.shape == (5, 2)
     assert mean.shape == (5,)
+    assert valid.shape == (5,)
+    assert valid.dtype == np.uint16
 
 
 def test_write_level_empty_prev(tmp_path):
@@ -201,6 +228,7 @@ def test_write_level_empty_prev(tmp_path):
     level = open_group(tmp_path / "bundle")["1"]
     assert level["env"].shape == (0, 2)
     assert level["mean"].shape == (0,)
+    assert level["valid"].shape == (0,)
 
 
 def test_write_level_rejects_a_level_below_one(tmp_path):
@@ -252,6 +280,7 @@ def test_write_continuous_channel_level1_folds_from_raw(
     expected = fold_raw_block(grp["raw"][:])
     assert np.array_equal(grp["1"]["env"][:], _env(expected))
     assert np.array_equal(grp["1"]["mean"][:], _mean(expected))
+    assert np.array_equal(grp["1"]["valid"][:], _valid(expected))
 
 
 def test_write_continuous_channel_each_level_folds_from_below(
@@ -304,9 +333,10 @@ def test_write_continuous_channel_level_members_and_periods(
     for p in plan_levels(64, 31.25, 7, 2):
         level = grp[str(p.level)]
         assert dict(level.attrs) == {"period_us": p.period_us}
-        assert sorted(level.array_keys()) == ["env", "mean"]
+        assert sorted(level.array_keys()) == ["env", "mean", "valid"]
         assert level["env"].shape == p.shape
         assert level["mean"].shape == (p.shape[0],)
+        assert level["valid"].shape == (p.shape[0],)
 
 
 def test_write_continuous_channel_short_source_gets_raw_and_no_levels(
@@ -401,8 +431,8 @@ def test_write_level_writes_one_whole_shard_per_member_per_write(
     sizing = ChunkShard(chunk_shape=(4, 2), shard_shape=(8, 2))
     writes = _record_writes(monkeypatch, "timeseries_zarr.write_continuous")
     write_level(group, blocks, plan, sizing, 5)
-    # One env write and one mean write per block, at the same offsets.
-    assert writes == [(0, 8), (0, 8), (8, 8), (8, 8)]
+    # One write per member per block, all at the same offsets.
+    assert writes == [(0, 8)] * 3 + [(8, 8)] * 3
     level = open_group(tmp_path / "bundle")["1"]
     expected = fold_raw_block(data)
     assert np.array_equal(level["env"][:], _env(expected))

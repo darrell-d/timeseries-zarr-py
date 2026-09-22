@@ -201,4 +201,8 @@ def test_bundle_writes_mean_for_every_channel(
     )
     grp = open_group(final)["0"]
     for plan in _levels(samples.shape[0]):
-        assert sorted(grp[str(plan.level)].array_keys()) == ["env", "mean"]
+        assert sorted(grp[str(plan.level)].array_keys()) == [
+            "env",
+            "mean",
+            "valid",
+        ]

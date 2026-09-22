@@ -7,6 +7,7 @@ from timeseries_zarr.constants import (
     MEAN_COL,
     MIN_COL,
     STAT_COLUMNS,
+    VALID_COL,
 )
 from timeseries_zarr.fold import fold_raw_block, fold_stat_block
 from timeseries_zarr.planning import bin_counts
@@ -64,6 +65,7 @@ def test_rebuffer_and_fold_stats_is_split_invariant(seed):
     arr[:, MAX_COL] = arr[:, MIN_COL] + 1.0
     arr[:, MEAN_COL] = rng.standard_normal(29)
     arr[:, COUNT_COL] = 4.0
+    arr[:, VALID_COL] = 4.0
     blocks = _split(arr, _random_sizes(rng, arr.shape[0]))
     assert np.allclose(_folded(blocks, fold_stat_block), fold_stat_block(arr))
 
@@ -280,12 +282,15 @@ def test_iter_level_stat_blocks_reassembles_a_written_level():
     level1 = fold_raw_block(raw)
     env = level1[:, MIN_COL : MAX_COL + 1].astype(np.float32)
     mean = level1[:, MEAN_COL].astype(np.float32)
+    valid = level1[:, VALID_COL].astype(np.uint16)
 
     out = np.concatenate(
-        list(iter_level_stat_blocks(env, mean, 37, 1, 4)), axis=0
+        list(iter_level_stat_blocks(env, mean, valid, 37, 1, 4)), axis=0
     )
     assert np.array_equal(out[:, MIN_COL : MAX_COL + 1], env)
     assert np.array_equal(out[:, MEAN_COL], mean)
+    # valid is read back, not rebuilt: it is data, not arithmetic.
+    assert np.array_equal(out[:, VALID_COL], valid)
     # The counts are rebuilt, not read: the trailing bin holds one sample.
     assert np.array_equal(out[:, COUNT_COL], bin_counts(37, 1, 0, env.shape[0]))
     assert out[-1, COUNT_COL] == 1.0
@@ -297,8 +302,9 @@ def test_iter_level_stat_blocks_is_block_invariant(block_len):
     level1 = fold_raw_block(raw)
     env = level1[:, MIN_COL : MAX_COL + 1].astype(np.float32)
     mean = level1[:, MEAN_COL].astype(np.float32)
+    valid = level1[:, VALID_COL].astype(np.uint16)
     out = np.concatenate(
-        list(iter_level_stat_blocks(env, mean, 37, 1, block_len)), axis=0
+        list(iter_level_stat_blocks(env, mean, valid, 37, 1, block_len)), axis=0
     )
     assert out.shape == (env.shape[0], STAT_COLUMNS)
     assert np.array_equal(out[:, COUNT_COL], bin_counts(37, 1, 0, env.shape[0]))
@@ -307,12 +313,14 @@ def test_iter_level_stat_blocks_is_block_invariant(block_len):
 def test_iter_level_stat_blocks_empty_level_yields_nothing():
     env = np.empty((0, 2), dtype=np.float32)
     mean = np.empty(0, dtype=np.float32)
-    assert list(iter_level_stat_blocks(env, mean, 0, 1, 4)) == []
+    valid = np.empty(0, dtype=np.uint16)
+    assert list(iter_level_stat_blocks(env, mean, valid, 0, 1, 4)) == []
 
 
 @pytest.mark.parametrize("block_len", [0, -1])
 def test_iter_level_stat_blocks_rejects_nonpositive_block(block_len):
     env = np.zeros((4, 2), dtype=np.float32)
     mean = np.zeros(4, dtype=np.float32)
+    valid = np.zeros(4, dtype=np.uint16)
     with pytest.raises(ValueError, match="positive"):
-        list(iter_level_stat_blocks(env, mean, 16, 1, block_len))
+        list(iter_level_stat_blocks(env, mean, valid, 16, 1, block_len))

@@ -1,7 +1,14 @@
 import numpy as np
 import pytest
 
-from timeseries_zarr.constants import COUNT_COL, MAX_COL, MEAN_COL, MIN_COL
+from timeseries_zarr.constants import (
+    COUNT_COL,
+    MAX_COL,
+    MEAN_COL,
+    MIN_COL,
+    STAT_COLUMNS,
+    VALID_COL,
+)
 from timeseries_zarr.fold import (
     _block_split,
     fold_block,
@@ -11,8 +18,14 @@ from timeseries_zarr.fold import (
 
 
 def _stats(rows):
-    """Build a stat block from (min, max, mean, count) tuples."""
-    return np.array(rows, dtype=np.float64)
+    """Build a stat block from (min, max, mean, count) tuples.
+
+    valid defaults to the count, the no-gaps case.
+    """
+    out = np.empty((len(rows), STAT_COLUMNS), dtype=np.float64)
+    out[:, :4] = np.array(rows, dtype=np.float64)
+    out[:, VALID_COL] = out[:, COUNT_COL]
+    return out
 
 
 @pytest.mark.parametrize(
@@ -49,11 +62,12 @@ def test_fold_raw_block_matches_reshape_reduce():
     raw = rng.standard_normal(64).astype(np.float32)
     out = fold_raw_block(raw)
     blocks = raw.reshape(-1, 4).astype(np.float64)
-    assert out.shape == (16, 4)
+    assert out.shape == (16, STAT_COLUMNS)
     assert np.array_equal(out[:, MIN_COL], blocks.min(axis=1))
     assert np.array_equal(out[:, MAX_COL], blocks.max(axis=1))
     assert np.allclose(out[:, MEAN_COL], blocks.mean(axis=1))
     assert np.array_equal(out[:, COUNT_COL], np.full(16, 4.0))
+    assert np.array_equal(out[:, VALID_COL], np.full(16, 4.0))
 
 
 @pytest.mark.parametrize(
@@ -62,25 +76,25 @@ def test_fold_raw_block_matches_reshape_reduce():
 )
 def test_fold_raw_block_shape(m, expected_rows):
     out = fold_raw_block(np.arange(m, dtype=np.float32))
-    assert out.shape == (expected_rows, 4)
+    assert out.shape == (expected_rows, STAT_COLUMNS)
 
 
 def test_fold_raw_block_tail_folds_partial_block():
     out = fold_raw_block(np.array([0, 1, 2, 3, 4], dtype=np.float32))
-    assert out.shape == (2, 4)
-    assert tuple(out[0]) == (0.0, 3.0, 1.5, 4.0)
-    assert tuple(out[1]) == (4.0, 4.0, 4.0, 1.0)
+    assert out.shape == (2, STAT_COLUMNS)
+    assert tuple(out[0]) == (0.0, 3.0, 1.5, 4.0, 4.0)
+    assert tuple(out[1]) == (4.0, 4.0, 4.0, 1.0, 1.0)
 
 
 def test_fold_raw_block_empty():
     out = fold_raw_block(np.array([], dtype=np.float32))
-    assert out.shape == (0, 4)
+    assert out.shape == (0, STAT_COLUMNS)
 
 
 def test_fold_raw_block_single_sample():
     out = fold_raw_block(np.array([7.0], dtype=np.float32))
-    assert out.shape == (1, 4)
-    assert tuple(out[0]) == (7.0, 7.0, 7.0, 1.0)
+    assert out.shape == (1, STAT_COLUMNS)
+    assert tuple(out[0]) == (7.0, 7.0, 7.0, 1.0, 1.0)
 
 
 def test_fold_raw_block_dtype_is_float64():
@@ -96,19 +110,20 @@ def test_fold_raw_block_nan_propagates():
     assert np.isnan(out[0, MEAN_COL])
     # The count is time support, so a NaN bin still spans its four slots.
     assert out[0, COUNT_COL] == 4.0
-    assert tuple(out[1]) == (5.0, 8.0, 6.5, 4.0)
+    assert tuple(out[1]) == (5.0, 8.0, 6.5, 4.0, 4.0)
 
 
 def test_fold_stat_block_matches_reshape_reduce():
     rng = np.random.default_rng(1)
-    stats = np.empty((16, 4), dtype=np.float64)
+    stats = np.empty((16, STAT_COLUMNS), dtype=np.float64)
     stats[:, MIN_COL] = rng.standard_normal(16)
     stats[:, MAX_COL] = stats[:, MIN_COL] + 1.0
     stats[:, MEAN_COL] = rng.standard_normal(16)
     stats[:, COUNT_COL] = 4.0
+    stats[:, VALID_COL] = 4.0
     out = fold_stat_block(stats)
-    groups = stats.reshape(-1, 4, 4)
-    assert out.shape == (4, 4)
+    groups = stats.reshape(-1, 4, STAT_COLUMNS)
+    assert out.shape == (4, STAT_COLUMNS)
     assert np.array_equal(out[:, MIN_COL], groups[:, :, MIN_COL].min(axis=1))
     assert np.array_equal(out[:, MAX_COL], groups[:, :, MAX_COL].max(axis=1))
     assert np.allclose(out[:, MEAN_COL], groups[:, :, MEAN_COL].mean(axis=1))
@@ -136,8 +151,8 @@ def test_fold_stat_block_weights_the_mean_by_count():
     [(1, 1), (4, 1), (5, 2), (7, 2), (8, 2), (9, 3)],
 )
 def test_fold_stat_block_shape(m, expected_rows):
-    stats = np.ones((m, 4), dtype=np.float64)
-    assert fold_stat_block(stats).shape == (expected_rows, 4)
+    stats = np.ones((m, STAT_COLUMNS), dtype=np.float64)
+    assert fold_stat_block(stats).shape == (expected_rows, STAT_COLUMNS)
 
 
 def test_fold_stat_block_tail_folds_partial_block():
@@ -151,25 +166,26 @@ def test_fold_stat_block_tail_folds_partial_block():
         ]
     )
     out = fold_stat_block(stats)
-    assert out.shape == (2, 4)
-    assert tuple(out[0]) == (0.0, 9.0, 2.5, 16.0)
-    assert tuple(out[1]) == (7.0, 8.0, 5.0, 4.0)
+    assert out.shape == (2, STAT_COLUMNS)
+    assert tuple(out[0]) == (0.0, 9.0, 2.5, 16.0, 16.0)
+    assert tuple(out[1]) == (7.0, 8.0, 5.0, 4.0, 4.0)
 
 
 def test_fold_stat_block_empty():
-    out = fold_stat_block(np.empty((0, 4), dtype=np.float64))
-    assert out.shape == (0, 4)
+    out = fold_stat_block(np.empty((0, STAT_COLUMNS), dtype=np.float64))
+    assert out.shape == (0, STAT_COLUMNS)
 
 
 def test_fold_stat_block_single_row_identity():
     out = fold_stat_block(_stats([[2.0, 9.0, 5.0, 4.0]]))
-    assert out.shape == (1, 4)
-    assert tuple(out[0]) == (2.0, 9.0, 5.0, 4.0)
+    assert out.shape == (1, STAT_COLUMNS)
+    assert tuple(out[0]) == (2.0, 9.0, 5.0, 4.0, 4.0)
 
 
 def test_fold_stat_block_nan_propagates():
-    stats = np.ones((8, 4), dtype=np.float64)
+    stats = np.ones((8, STAT_COLUMNS), dtype=np.float64)
     stats[:, COUNT_COL] = 4.0
+    stats[:, VALID_COL] = 4.0
     stats[1, MIN_COL] = np.nan
     stats[1, MEAN_COL] = np.nan
     out = fold_stat_block(stats)
@@ -183,7 +199,7 @@ def test_fold_stat_block_composes_with_raw_exactly():
     rng = np.random.default_rng(2)
     raw = rng.standard_normal(16).astype(np.float32)
     level2 = fold_stat_block(fold_raw_block(raw))
-    assert level2.shape == (1, 4)
+    assert level2.shape == (1, STAT_COLUMNS)
     assert level2[0, MIN_COL] == raw.min()
     assert level2[0, MAX_COL] == raw.max()
     assert level2[0, MEAN_COL] == pytest.approx(raw.astype(np.float64).mean())
@@ -209,7 +225,7 @@ def test_fold_block_rank1_delegates_to_raw():
 
 
 def test_fold_block_rank2_delegates_to_stats():
-    stats = np.ones((8, 4), dtype=np.float64)
+    stats = np.ones((8, STAT_COLUMNS), dtype=np.float64)
     assert np.array_equal(fold_block(stats), fold_stat_block(stats))
 
 

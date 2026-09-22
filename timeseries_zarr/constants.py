@@ -14,8 +14,8 @@ Raw samples are not a level, so this counts only the folded ones.
 ENVELOPE_PAIR_SIZE: Final = 2
 """Length of the trailing (min, max) axis of a level's env member."""
 
-STAT_COLUMNS: Final = 4
-"""Columns of an in-flight stat block: min, max, mean, count."""
+STAT_COLUMNS: Final = 5
+"""Columns of an in-flight stat block: min, max, mean, count, valid."""
 
 MIN_COL: Final = 0
 """Stat-block column holding a bin's minimum."""
@@ -30,7 +30,23 @@ COUNT_COL: Final = 3
 """Stat-block column holding the raw samples behind a bin.
 
 Time support, not a count of finite samples: a bin full of NaN still spans
-its slots. Never written to disk; the valid member is a different number.
+its slots. Never written to disk, because a level read back can rebuild it
+from its own number. The valid column is the one that counts finite samples.
+"""
+
+VALID_COL: Final = 4
+"""Stat-block column holding the finite samples behind a bin.
+
+Equal to COUNT_COL only where nothing is missing. It is what separates one
+bad sample in a full bin from an amplifier stop, and it is data rather than
+arithmetic, so unlike the count it is written and read back.
+"""
+
+MAX_VALID_COUNT: Final = 2**16 - 1
+"""Largest per-bin valid count the u2 member can hold.
+
+A level-7 bin spans 16384 raw samples and fits. Level 8 would span 65536 and
+would not, so MAX_LEVELS is what keeps this member in range.
 """
 
 MAX_UNIT_CLUSTERS: Final = 256

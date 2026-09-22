@@ -1,11 +1,16 @@
 """Pyramid folding: reduce one level to the next over disjoint blocks of 4.
 
-A folded level travels as one float64 array of four columns -- min, max, mean,
-and the count of raw samples behind the bin. One array means the streaming
-machinery carries every statistic in a single pass and across a block boundary
-without knowing what the columns mean. Only min, max and mean reach disk; the
-count exists because a trailing partial bin holds fewer than 4 samples, so a
-plain mean of means would over-weight it.
+A folded level travels as one float64 array of five columns -- min, max, mean,
+count and valid. One array means the streaming machinery carries every
+statistic in a single pass and across a block boundary without knowing what
+the columns mean.
+
+Count and valid are different numbers and both are needed. Count is time
+support, the raw slots a bin spans, and it exists because a trailing partial
+bin holds fewer than 4 samples and a plain mean of means would over-weight it;
+it never reaches disk, because a level read back rebuilds it from its own
+number. Valid is how many of those slots held a finite sample, which is data
+and cannot be rebuilt, so it is written.
 
 The arithmetic is float64 throughout and narrows to float32 only at the write.
 A mean is a sum, and summing 16384 samples of a signal riding on a large DC
@@ -28,6 +33,7 @@ from timeseries_zarr.constants import (
     MEAN_COL,
     MIN_COL,
     STAT_COLUMNS,
+    VALID_COL,
 )
 
 
@@ -55,9 +61,9 @@ def fold_raw_block(
 ) -> npt.NDArray[np.float64]:
     """Fold raw samples into stat rows over disjoint blocks of 4.
 
-    Takes rank-1 samples and returns one row per bin: min, max, mean, and the
-    number of samples behind it. A final partial block of 1-3 samples becomes
-    one row carrying its true count.
+    Takes rank-1 samples and returns one row per bin: min, max, mean, the
+    number of samples behind it, and how many of those were finite. A final
+    partial block of 1-3 samples becomes one row carrying its true counts.
     """
     block = DECIMATION_FACTOR
     n_full, tail_len = _block_split(raw.shape[0], block)
@@ -70,12 +76,14 @@ def fold_raw_block(
         out[:n_full, MAX_COL] = full.max(axis=1)
         out[:n_full, MEAN_COL] = full.mean(axis=1)
         out[:n_full, COUNT_COL] = block
+        out[:n_full, VALID_COL] = np.isfinite(full).sum(axis=1)
     if tail_len:
         tail = values[split:]
         out[n_full, MIN_COL] = tail.min()
         out[n_full, MAX_COL] = tail.max()
         out[n_full, MEAN_COL] = tail.mean()
         out[n_full, COUNT_COL] = tail_len
+        out[n_full, VALID_COL] = np.isfinite(tail).sum()
     return out
 
 
@@ -85,9 +93,10 @@ def fold_stat_block(
     """Fold stat rows into coarser stat rows over disjoint blocks of 4.
 
     Each output row takes the smallest of the 4 mins, the largest of the 4
-    maxes, the count-weighted mean of the 4 means, and the sum of the 4 counts.
-    Weighting by count is what keeps the mean exact where the block below ends
-    in a partial bin. A final partial block of 1-3 rows becomes one row.
+    maxes, the count-weighted mean of the 4 means, and the sums of the 4 counts
+    and the 4 valid counts. Weighting by count is what keeps the mean exact
+    where the block below ends in a partial bin. A final partial block of 1-3
+    rows becomes one row.
     """
     block = DECIMATION_FACTOR
     n_full, tail_len = _block_split(stats.shape[0], block)
@@ -112,6 +121,7 @@ def _reduce_into(
     out[:, MAX_COL] = groups[:, :, MAX_COL].max(axis=1)
     out[:, MEAN_COL] = (groups[:, :, MEAN_COL] * counts).sum(axis=1) / total
     out[:, COUNT_COL] = total
+    out[:, VALID_COL] = groups[:, :, VALID_COL].sum(axis=1)
 
 
 def fold_block(

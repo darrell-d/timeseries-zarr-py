@@ -206,8 +206,21 @@ served as the fill value. It needs two things this one does not:
   that answers a missing key with an authorization error rather than a not-found status
   turns an absent chunk into a failed read.
 
-Those two are currently a matched pair: because no chunk is ever absent, `fill_value` is
-never consulted. Changing one without the other is the bug.
+Those two were a matched pair. `fill_value` is now declared as NaN, so the first half is
+done and only the `write_empty_chunks` decision is left.
+
+**What it is waiting on is not code.** `write_empty_chunks: True` is there because an
+object store that answers a missing key with an authorization error rather than a
+not-found turns an absent chunk into a failed read. On S3 a `GetObject` for a key that
+does not exist returns 403 unless the caller holds `s3:ListBucket` on the bucket, and 404
+only if it does. A browser reading a public bundle through a CDN is exactly that case, and
+it fails hard rather than reading as a gap.
+
+So the open question is: **on the bucket these bundles are served from, does a missing key
+answer 404 or 403?** Once that is 404, the flip is one line in `zarr_io.create_array`.
+Worth checking at the same time: how `write_empty_chunks=False` interacts with the
+sharding codec, since whether an all-fill inner chunk is dropped inside a shard, or only a
+wholly empty shard is skipped, decides what the saving actually is.
 
 For the measured recording the saving would be a few kilobytes: 9.6 h of gap in a 146 h
 span, and Zstd flattens a constant NaN run to almost nothing. Sparse storage earns
