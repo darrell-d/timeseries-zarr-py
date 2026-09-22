@@ -1,6 +1,7 @@
 """Build the attribute dicts written into the bundle's zarr.json files.
 
-docs/bundle-format.md specifies the keys and their types.
+The format spec specifies the keys and their types:
+https://github.com/Pennsieve/timeseries-zarr-paper/blob/main/bundle-format.md
 """
 
 from timeseries_zarr.types import ChannelKind

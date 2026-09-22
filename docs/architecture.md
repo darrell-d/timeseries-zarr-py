@@ -46,7 +46,7 @@ without touching a store.
 ## Numeric core
 
 `fold.py` reduces one level to the next: min and max over disjoint blocks of 4. See
-[the format spec](./bundle-format.md) for the exact rule and the NaN behavior.
+[the format spec](https://github.com/Pennsieve/timeseries-zarr-paper/blob/main/bundle-format.md) for the exact rule and the NaN behavior.
 
 `streaming.py` drives the fold over a source one block at a time and buffers across block
 boundaries so a run of 4 that straddles two blocks still folds correctly. Memory stays
