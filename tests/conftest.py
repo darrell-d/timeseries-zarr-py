@@ -17,8 +17,10 @@ class ArrayContinuousSource:
         start_us=0,
         name="ch-0",
         unit="uV",
+        offset_uv=0.0,
     ):
         self._samples = np.asarray(samples, dtype=np.float32)
+        self._offset_uv = offset_uv
         self.id = id
         self.name = name
         self.unit = unit
@@ -33,6 +35,9 @@ class ArrayContinuousSource:
 
     def num_samples(self):
         return int(self._samples.shape[0])
+
+    def offset_uv(self):
+        return self._offset_uv
 
     def read_samples(self, start, stop):
         return self._samples[start:stop]

@@ -626,3 +626,30 @@ def test_build_meta_from_nwb_records_the_converter_and_devices():
 def test_build_meta_from_nwb_carries_no_start_us():
     # The onset is the earliest channel start, which only the bundle knows.
     assert "start_us" not in build_meta_from_nwb(mock_NWBFile()).session
+
+
+def test_continuous_source_reports_the_declared_offset_in_uv():
+    es = mock_ElectricalSeries(rate=100.0, offset=0.5)
+    source = NwbContinuousSource(es, 0, datetime(2026, 1, 1, tzinfo=UTC))
+    # 0.5 V of bias is 500000 uV, the unit the samples are stored in.
+    assert source.offset_uv() == pytest.approx(500_000.0)
+
+
+def test_continuous_source_reports_no_offset_when_none_is_declared():
+    es = mock_ElectricalSeries(rate=100.0)
+    source = NwbContinuousSource(es, 0, datetime(2026, 1, 1, tzinfo=UTC))
+    assert source.offset_uv() == 0.0
+
+
+def test_timeseries_source_scales_the_offset_like_its_samples():
+    series = mock_TimeSeries(rate=100.0, unit="millivolts", offset=2.0)
+    source = NwbTimeSeriesSource(series, 0, datetime(2026, 1, 1, tzinfo=UTC))
+    assert source.unit == "uV"
+    assert source.offset_uv() == pytest.approx(2000.0)
+
+
+def test_timeseries_source_keeps_the_offset_in_a_non_volts_unit():
+    series = mock_TimeSeries(rate=100.0, unit="degrees", offset=2.0)
+    source = NwbTimeSeriesSource(series, 0, datetime(2026, 1, 1, tzinfo=UTC))
+    assert source.unit == "degrees"
+    assert source.offset_uv() == pytest.approx(2.0)

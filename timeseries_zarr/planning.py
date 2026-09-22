@@ -6,6 +6,9 @@ numbered from 1, which is what lets a reader treat every numeric-keyed child of
 a channel as a level group without inspecting its shape.
 """
 
+import numpy as np
+import numpy.typing as npt
+
 from timeseries_zarr.constants import (
     DECIMATION_FACTOR,
     ENVELOPE_PAIR_SIZE,
@@ -92,3 +95,21 @@ def plan_levels(
         )
         for k in range(1, level_count(num_samples, max_levels, min_bins) + 1)
     ]
+
+
+def bin_counts(
+    num_samples: int, level: int, start: int, stop: int
+) -> npt.NDArray[np.int64]:
+    """Return the raw-sample count behind each bin in [start, stop) of a level.
+
+    Every bin folds 4**level raw samples except the last, which holds whatever
+    is left over. That is why nothing has to be stored: a level read back from
+    disk can have its counts rebuilt from the sample count and the level number.
+
+    The count is time support, not a count of finite samples. A bin holding
+    nothing but NaN still spans its slots.
+    """
+    span = DECIMATION_FACTOR**level
+    starts = np.arange(start, stop, dtype=np.int64) * span
+    counts: npt.NDArray[np.int64] = np.clip(num_samples - starts, 0, span)
+    return counts

@@ -22,14 +22,19 @@ def channel_group_attrs(
     kind: ChannelKind,
     name: str = "",
     unit: str = "",
+    offset_uv: float = 0.0,
 ) -> dict[str, object]:
     """Return the channel-group zarr.json attributes for one channel.
 
     offset_us is microseconds from the bundle's onset to this channel's
-    first sample or event, never a wall-clock value. Values pass through
+    first sample or event, never a wall-clock value.
+
+    offset_uv is the DC offset removed from the statistics before folding. It
+    is written only when there is one, since the attribute is optional and a
+    reader that does not find it adds nothing back. Other values pass through
     unchanged.
     """
-    return {
+    attributes: dict[str, object] = {
         "id": id,
         "rate_hz": rate_hz,
         "offset_us": offset_us,
@@ -37,6 +42,9 @@ def channel_group_attrs(
         "name": name,
         "unit": unit,
     }
+    if offset_uv:
+        attributes["offset_uv"] = offset_uv
+    return attributes
 
 
 def meta_group_attrs(

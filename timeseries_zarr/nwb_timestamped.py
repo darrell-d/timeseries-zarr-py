@@ -16,6 +16,7 @@ from timeseries_zarr.grid import (
 from timeseries_zarr.nwb_series import (
     electrode_id,
     electrode_name,
+    offset_uv,
     read_uv,
 )
 
@@ -98,6 +99,14 @@ class NwbTimestampedSource:
     def num_samples(self) -> int:
         """Return the length of the grid, gaps included."""
         return self._grid_length
+
+    def offset_uv(self) -> float:
+        """Return the series' declared DC offset in microvolts.
+
+        The gaps read back NaN, which no offset shifts, so the same number
+        serves a gridded channel as a continuous one.
+        """
+        return offset_uv(self._series)
 
     def read_samples(self, start: int, stop: int) -> npt.NDArray[np.float32]:
         """Return the half-open [start, stop) grid window as float32 microvolts.

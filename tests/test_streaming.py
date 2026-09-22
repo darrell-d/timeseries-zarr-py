@@ -1,10 +1,20 @@
 import numpy as np
 import pytest
 
-from timeseries_zarr.fold import fold_pair_block, fold_raw_block
+from timeseries_zarr.constants import (
+    COUNT_COL,
+    MAX_COL,
+    MEAN_COL,
+    MIN_COL,
+    STAT_COLUMNS,
+)
+from timeseries_zarr.fold import fold_raw_block, fold_stat_block
+from timeseries_zarr.planning import bin_counts
 from timeseries_zarr.streaming import (
     _rebuffer_and_fold,
     iter_array_blocks,
+    iter_level_stat_blocks,
+    iter_offset_removed_blocks,
     iter_raw_blocks,
     iter_raw_to_level1,
 )
@@ -34,7 +44,7 @@ def _folded(blocks, fold_fn):
     return (
         np.concatenate(out, axis=0)
         if out
-        else np.empty((0, 2), dtype=np.float32)
+        else np.empty((0, STAT_COLUMNS), dtype=np.float64)
     )
 
 
@@ -47,13 +57,15 @@ def test_rebuffer_and_fold_raw_is_split_invariant(seed):
 
 
 @pytest.mark.parametrize("seed", range(5))
-def test_rebuffer_and_fold_pairs_is_split_invariant(seed):
+def test_rebuffer_and_fold_stats_is_split_invariant(seed):
     rng = np.random.default_rng(seed + 100)
-    arr = rng.standard_normal((29, 2)).astype(np.float32)
+    arr = np.empty((29, STAT_COLUMNS), dtype=np.float64)
+    arr[:, MIN_COL] = rng.standard_normal(29)
+    arr[:, MAX_COL] = arr[:, MIN_COL] + 1.0
+    arr[:, MEAN_COL] = rng.standard_normal(29)
+    arr[:, COUNT_COL] = 4.0
     blocks = _split(arr, _random_sizes(rng, arr.shape[0]))
-    assert np.array_equal(
-        _folded(blocks, fold_pair_block), fold_pair_block(arr)
-    )
+    assert np.allclose(_folded(blocks, fold_stat_block), fold_stat_block(arr))
 
 
 def test_rebuffer_and_fold_specific_splits_match_whole():
@@ -86,7 +98,9 @@ def test_rebuffer_and_fold_carry_stays_below_group(seed):
         assert length % group == 0
     assert max(seen_lengths) <= max_block + group - 1
     assert np.array_equal(
-        np.concatenate(out, axis=0) if out else np.empty((0, 2), np.float32),
+        np.concatenate(out, axis=0)
+        if out
+        else np.empty((0, STAT_COLUMNS), np.float64),
         fold_raw_block(arr),
     )
 
@@ -112,7 +126,7 @@ def test_rebuffer_and_fold_empty_stream_yields_nothing():
 def test_rebuffer_and_fold_single_short_block():
     arr = np.array([3, 1], dtype=np.float32)
     out = _folded([arr], fold_raw_block)
-    assert out.shape == (1, 2)
+    assert out.shape == (1, STAT_COLUMNS)
     assert np.array_equal(out, fold_raw_block(arr))
 
 
@@ -152,7 +166,7 @@ def test_iter_raw_blocks_rejects_nonpositive_block(
 
 
 @pytest.mark.parametrize("block_samples", [1, 3, 4, 7, 16, 1000])
-def test_iter_level0_to_level1_matches_whole_fold(
+def test_iter_raw_to_level1_matches_whole_fold(
     continuous_source, block_samples
 ):
     samples = np.arange(50, dtype=np.float32)
@@ -160,18 +174,18 @@ def test_iter_level0_to_level1_matches_whole_fold(
     result = (
         np.concatenate(out, axis=0)
         if out
-        else np.empty((0, 2), dtype=np.float32)
+        else np.empty((0, STAT_COLUMNS), dtype=np.float64)
     )
     assert np.array_equal(result, fold_raw_block(samples))
 
 
-def test_iter_level0_to_level1_empty_source_yields_nothing(continuous_source):
+def test_iter_raw_to_level1_empty_source_yields_nothing(continuous_source):
     src = continuous_source(np.empty(0, dtype=np.float32))
     assert list(iter_raw_to_level1(src, 4)) == []
 
 
 @pytest.mark.parametrize("block_samples", [0, -1])
-def test_iter_level0_to_level1_rejects_nonpositive_block(
+def test_iter_raw_to_level1_rejects_nonpositive_block(
     continuous_source, block_samples
 ):
     src = continuous_source(np.arange(8, dtype=np.float32))
@@ -217,3 +231,88 @@ def test_iter_array_blocks_rejects_nonpositive_block(block_len):
     arr = np.arange(5, dtype=np.float32)
     with pytest.raises(ValueError, match="positive"):
         list(iter_array_blocks(arr, block_len))
+
+
+def test_iter_offset_removed_blocks_subtracts_the_offset():
+    arr = np.arange(8, dtype=np.float32)
+    out = np.concatenate(list(iter_offset_removed_blocks(arr, 3.0, 4)))
+    assert np.array_equal(out, np.arange(8, dtype=np.float64) - 3.0)
+    assert out.dtype == np.float64
+
+
+def test_iter_offset_removed_blocks_keeps_nan():
+    arr = np.array([1.0, np.nan, 3.0, 4.0], dtype=np.float32)
+    out = np.concatenate(list(iter_offset_removed_blocks(arr, 1.0, 2)))
+    assert np.isnan(out[1])
+    assert out[0] == 0.0
+
+
+def test_iter_offset_removed_blocks_recovers_what_float32_would_lose():
+    """Why the subtraction is float64: the signal is 1e-2 on a 5e5 offset."""
+    offset = 500_000.0
+    signal = np.array([0.01, 0.02, 0.03, 0.04], dtype=np.float64)
+    raw = (offset + signal).astype(np.float32)
+    out = np.concatenate(list(iter_offset_removed_blocks(raw, offset, 4)))
+    # float32 near 5e5 resolves about 0.03, so the samples survive only
+    # because the subtraction happens before anything is summed.
+    assert out.max() - out.min() > 0.0
+    assert np.all(np.abs(out) < 1.0)
+
+
+def test_iter_offset_removed_blocks_empty_yields_nothing():
+    assert (
+        list(iter_offset_removed_blocks(np.empty(0, np.float32), 1.0, 4)) == []
+    )
+
+
+@pytest.mark.parametrize("block_len", [0, -1])
+def test_iter_offset_removed_blocks_rejects_nonpositive_block(block_len):
+    with pytest.raises(ValueError, match="positive"):
+        list(
+            iter_offset_removed_blocks(
+                np.arange(4, dtype=np.float32), 0.0, block_len
+            )
+        )
+
+
+def test_iter_level_stat_blocks_reassembles_a_written_level():
+    raw = np.arange(37, dtype=np.float32)
+    level1 = fold_raw_block(raw)
+    env = level1[:, MIN_COL : MAX_COL + 1].astype(np.float32)
+    mean = level1[:, MEAN_COL].astype(np.float32)
+
+    out = np.concatenate(
+        list(iter_level_stat_blocks(env, mean, 37, 1, 4)), axis=0
+    )
+    assert np.array_equal(out[:, MIN_COL : MAX_COL + 1], env)
+    assert np.array_equal(out[:, MEAN_COL], mean)
+    # The counts are rebuilt, not read: the trailing bin holds one sample.
+    assert np.array_equal(out[:, COUNT_COL], bin_counts(37, 1, 0, env.shape[0]))
+    assert out[-1, COUNT_COL] == 1.0
+
+
+@pytest.mark.parametrize("block_len", [1, 3, 4, 16, 1000])
+def test_iter_level_stat_blocks_is_block_invariant(block_len):
+    raw = np.arange(37, dtype=np.float32)
+    level1 = fold_raw_block(raw)
+    env = level1[:, MIN_COL : MAX_COL + 1].astype(np.float32)
+    mean = level1[:, MEAN_COL].astype(np.float32)
+    out = np.concatenate(
+        list(iter_level_stat_blocks(env, mean, 37, 1, block_len)), axis=0
+    )
+    assert out.shape == (env.shape[0], STAT_COLUMNS)
+    assert np.array_equal(out[:, COUNT_COL], bin_counts(37, 1, 0, env.shape[0]))
+
+
+def test_iter_level_stat_blocks_empty_level_yields_nothing():
+    env = np.empty((0, 2), dtype=np.float32)
+    mean = np.empty(0, dtype=np.float32)
+    assert list(iter_level_stat_blocks(env, mean, 0, 1, 4)) == []
+
+
+@pytest.mark.parametrize("block_len", [0, -1])
+def test_iter_level_stat_blocks_rejects_nonpositive_block(block_len):
+    env = np.zeros((4, 2), dtype=np.float32)
+    mean = np.zeros(4, dtype=np.float32)
+    with pytest.raises(ValueError, match="positive"):
+        list(iter_level_stat_blocks(env, mean, 16, 1, block_len))

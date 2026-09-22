@@ -37,6 +37,15 @@ class ContinuousChannelSource(Protocol):
         """Return the total number of raw samples in the channel."""
         ...
 
+    def offset_uv(self) -> float:
+        """Return the channel's DC offset, in the unit its samples are stored in.
+
+        The writer subtracts it before folding, so the statistics hold the
+        signal without its bias and a reader adds it back in float64. A source
+        that has no offset to declare returns 0.0.
+        """
+        ...
+
     def read_samples(self, start: int, stop: int) -> npt.NDArray[np.float32]:
         """Return the half-open [start, stop) sample window as float32."""
         ...

@@ -92,3 +92,17 @@ def read_uv(
     if unit not in UNIT_TO_UV:
         raise ValueError(f"unsupported ElectricalSeries unit: {unit!r}")
     return (scaled * UNIT_TO_UV[unit]).astype(np.float32)
+
+
+def offset_uv(series: ElectricalSeries) -> float:
+    """Return the series' declared DC offset in microvolts.
+
+    NWB applies this after its conversion factors, so it is already in the
+    series' own unit and needs only the volts-family conversion read_uv uses.
+    An acquisition system that bakes its bias into the samples and declares no
+    offset reports 0.0, and this cannot detect that.
+    """
+    unit = str(series.unit).lower()
+    if unit not in UNIT_TO_UV:
+        raise ValueError(f"unsupported ElectricalSeries unit: {unit!r}")
+    return float(series.offset) * UNIT_TO_UV[unit]

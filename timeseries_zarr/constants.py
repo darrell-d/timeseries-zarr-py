@@ -12,7 +12,26 @@ Raw samples are not a level, so this counts only the folded ones.
 """
 
 ENVELOPE_PAIR_SIZE: Final = 2
-"""Length of the trailing (min, max) axis on every coarser pyramid level."""
+"""Length of the trailing (min, max) axis of a level's env member."""
+
+STAT_COLUMNS: Final = 4
+"""Columns of an in-flight stat block: min, max, mean, count."""
+
+MIN_COL: Final = 0
+"""Stat-block column holding a bin's minimum."""
+
+MAX_COL: Final = 1
+"""Stat-block column holding a bin's maximum."""
+
+MEAN_COL: Final = 2
+"""Stat-block column holding a bin's mean."""
+
+COUNT_COL: Final = 3
+"""Stat-block column holding the raw samples behind a bin.
+
+Time support, not a count of finite samples: a bin full of NaN still spans
+its slots. Never written to disk; the valid member is a different number.
+"""
 
 MAX_UNIT_CLUSTERS: Final = 256
 """Most distinct clusters a unit channel can hold (the uint8 cluster-id range)."""

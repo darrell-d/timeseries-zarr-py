@@ -20,6 +20,7 @@ from timeseries_zarr.nwb_series import (
     channel_count,
     electrode_id,
     electrode_name,
+    offset_uv,
     read_column,
     read_uv,
     require_rate,
@@ -85,6 +86,10 @@ class NwbContinuousSource:
     def num_samples(self) -> int:
         """Return the length of the series' time axis, shared by every channel."""
         return int(self._series.data.shape[0])
+
+    def offset_uv(self) -> float:
+        """Return the series' declared DC offset in microvolts."""
+        return offset_uv(self._series)
 
     def read_samples(self, start: int, stop: int) -> npt.NDArray[np.float32]:
         """Return the half-open [start, stop) sample window as float32 microvolts.
@@ -159,6 +164,11 @@ class NwbTimeSeriesSource:
     def num_samples(self) -> int:
         """Return the length of the series' time axis, shared by every channel."""
         return int(self._series.data.shape[0])
+
+    def offset_uv(self) -> float:
+        """Return the series' declared DC offset in the channel's own unit."""
+        offset = float(self._series.offset)
+        return offset if self._uv_factor is None else offset * self._uv_factor
 
     def read_samples(self, start: int, stop: int) -> npt.NDArray[np.float32]:
         """Return the [start, stop) sample window as float32 in the channel unit.

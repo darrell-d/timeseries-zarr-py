@@ -1,13 +1,21 @@
 """Bounded-memory streaming generators that drive the folds over a source."""
 
 from collections.abc import Callable, Iterable, Iterator
-from typing import Protocol
+from typing import Any, Protocol
 
 import numpy as np
 import numpy.typing as npt
 
-from timeseries_zarr.constants import DECIMATION_FACTOR
+from timeseries_zarr.constants import (
+    COUNT_COL,
+    DECIMATION_FACTOR,
+    MAX_COL,
+    MEAN_COL,
+    MIN_COL,
+    STAT_COLUMNS,
+)
 from timeseries_zarr.fold import fold_raw_block
+from timeseries_zarr.planning import bin_counts
 from timeseries_zarr.protocols import ContinuousChannelSource
 
 
@@ -29,18 +37,18 @@ class BlockReadableArray(Protocol):
 
 
 def _rebuffer_and_fold(
-    blocks: Iterable[npt.NDArray[np.float32]],
-    fold_fn: Callable[[npt.NDArray[np.float32]], npt.NDArray[np.float32]],
+    blocks: Iterable[npt.NDArray[np.floating[Any]]],
+    fold_fn: Callable[[npt.NDArray[np.floating[Any]]], npt.NDArray[np.float64]],
     group: int = DECIMATION_FACTOR,
-) -> Iterator[npt.NDArray[np.float32]]:
+) -> Iterator[npt.NDArray[np.float64]]:
     """Fold a stream of blocks into the next coarser level.
 
-    Blocks are rank-1 raw runs or rank-2 (min, max) runs. The concatenation of
-    the yielded arrays equals fold_fn applied to the whole concatenated input,
+    Blocks are rank-1 raw runs or rank-2 stat rows. The concatenation of the
+    yielded arrays equals fold_fn applied to the whole concatenated input,
     computed in bounded memory: at most group-1 rows are carried across a block
     boundary.
     """
-    carry: npt.NDArray[np.float32] | None = None
+    carry: npt.NDArray[np.floating[Any]] | None = None
     for block in blocks:
         # An exhausted carry still concatenates to the block itself, so skip the
         # copy: with shard-aligned inputs that is every iteration but the last.
@@ -77,8 +85,8 @@ def iter_raw_blocks(
 
 def iter_raw_to_level1(
     source: ContinuousChannelSource, block_samples: int
-) -> Iterator[npt.NDArray[np.float32]]:
-    """Yield level-1 (min, max) pairs folded from the source's raw samples.
+) -> Iterator[npt.NDArray[np.float64]]:
+    """Yield level-1 stat rows folded from the source's raw samples.
 
     One row per 4 raw samples, keep-tail. The concatenated output equals
     folding the whole series at once, whatever block_samples is. Raises
@@ -107,3 +115,44 @@ def iter_array_blocks(
     for start in range(0, n, block_len):
         stop = min(n, start + block_len)
         yield array[start:stop]
+
+
+def iter_offset_removed_blocks(
+    array: BlockReadableArray, offset_uv: float, block_len: int
+) -> Iterator[npt.NDArray[np.float64]]:
+    """Yield an on-disk raw array in float64 blocks with its DC offset removed.
+
+    The subtraction is what the offset_uv attribute means, and it happens in
+    float64 before anything is summed. Doing it in float32 would spend the
+    precision the attribute exists to protect. Raises ValueError if block_len is
+    not positive.
+    """
+    if block_len <= 0:
+        raise ValueError("block_len must be positive")
+    for block in iter_array_blocks(array, block_len):
+        yield block.astype(np.float64) - offset_uv
+
+
+def iter_level_stat_blocks(
+    env: BlockReadableArray,
+    mean: BlockReadableArray,
+    num_samples: int,
+    level: int,
+    block_len: int,
+) -> Iterator[npt.NDArray[np.float64]]:
+    """Yield a level already on disk as the stat blocks that fold the next one.
+
+    Reassembles what the write narrowed: env and mean come back from their
+    arrays and the counts are rebuilt from the plan, since a bin's time support
+    is fixed by its level. Raises ValueError if block_len is not positive.
+    """
+    if block_len <= 0:
+        raise ValueError("block_len must be positive")
+    n = env.shape[0]
+    for start in range(0, n, block_len):
+        stop = min(n, start + block_len)
+        out = np.empty((stop - start, STAT_COLUMNS), dtype=np.float64)
+        out[:, MIN_COL : MAX_COL + 1] = env[start:stop]
+        out[:, MEAN_COL] = mean[start:stop]
+        out[:, COUNT_COL] = bin_counts(num_samples, level, start, stop)
+        yield out

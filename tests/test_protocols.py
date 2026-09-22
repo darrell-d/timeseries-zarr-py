@@ -17,6 +17,9 @@ class FakeContinuous:
     def num_samples(self):
         return 4
 
+    def offset_uv(self):
+        return 0.0
+
     def read_samples(self, start, stop):
         return np.zeros(stop - start, dtype=np.float32)
 

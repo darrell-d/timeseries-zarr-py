@@ -45,8 +45,22 @@ without touching a store.
 
 ## Numeric core
 
-`fold.py` reduces one level to the next: min and max over disjoint blocks of 4. See
+`fold.py` reduces one level to the next over disjoint blocks of 4. See
 [the format spec](https://github.com/Pennsieve/timeseries-zarr-paper/blob/main/bundle-format.md) for the exact rule and the NaN behavior.
+
+A folded level travels as one float64 array of four columns: min, max, mean, and the
+count of raw samples behind the bin. One array is what lets the streaming machinery carry
+every statistic in a single pass without knowing what the columns mean, so raw is read
+once however many statistics a level holds. Only the first three reach disk. The count is
+there because a trailing partial bin holds fewer than 4 samples and a plain mean of means
+would over-weight it; when a level is read back to fold the next one, the counts are
+rebuilt by `planning.bin_counts` rather than stored.
+
+The arithmetic is float64 and narrows to float32 at the write. A mean is a sum, and
+summing thousands of samples of a signal riding on a large DC offset is where float32
+loses the part you wanted. The same concern is why a channel's `offset_uv` is subtracted
+before anything is folded: `raw` keeps the offset, the statistics are relative to it, and
+a reader adds it back in float64.
 
 `streaming.py` drives the fold over a source one block at a time and buffers across block
 boundaries so a run of 4 that straddles two blocks still folds correctly. Memory stays
@@ -59,7 +73,10 @@ above. They hold the per-channel logic and no Zarr specifics.
 
 A continuous channel is the raw samples under `raw/`, then level groups keyed `1/`, `2/`
 and so on, each carrying `period_us` and holding one array per statistic over a shared
-bin axis. `env` is the only statistic so far. Raw is not a level: it carries no bin
+bin axis: `env` and `mean` today. Both are sized from one row geometry, because a mean
+row is half an env row and sizing them apart would put them on different shard
+boundaries, where only one could be written a whole shard at a time. Raw is not a level:
+it carries no bin
 arithmetic and no `period_us`, since the sample period is the channel's `rate_hz`.
 Keeping numeric keys for levels alone is what lets a reader find them without inspecting
 array shapes, and it is why a channel can omit `raw` and still be readable.
