@@ -52,7 +52,7 @@ def continuous_source():
 class ArrayUnitSource:
     """In-memory UnitChannelSource backed by arrays.
 
-    events are int64 absolute microseconds. units and waveforms default
+    events are int64 absolute microseconds. labels and waveforms default
     to zeros when not given.
     """
 
@@ -60,7 +60,7 @@ class ArrayUnitSource:
         self,
         events,
         *,
-        units=None,
+        labels=None,
         waveforms=None,
         points_per_event=4,
         id="unit-0",
@@ -72,10 +72,10 @@ class ArrayUnitSource:
         self._events = np.asarray(events, dtype=np.int64)
         n = int(self._events.shape[0])
         self._points_per_event = points_per_event
-        self._units = (
-            np.zeros(n, dtype=np.uint8)
-            if units is None
-            else np.asarray(units, dtype=np.uint8)
+        self._labels = (
+            np.zeros(n, dtype=np.uint16)
+            if labels is None
+            else np.asarray(labels, dtype=np.uint16)
         )
         self._waveforms = (
             np.zeros((n, points_per_event), dtype=np.float32)
@@ -103,8 +103,8 @@ class ArrayUnitSource:
     def read_events(self, start, stop):
         return self._events[start:stop]
 
-    def read_units(self, start, stop):
-        return self._units[start:stop]
+    def read_labels(self, start, stop):
+        return self._labels[start:stop]
 
     def read_waveforms(self, start, stop):
         return self._waveforms[start:stop]

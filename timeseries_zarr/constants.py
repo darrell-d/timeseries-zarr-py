@@ -49,8 +49,12 @@ A level-7 bin spans 16384 raw samples and fits. Level 8 would span 65536 and
 would not, so MAX_LEVELS is what keeps this member in range.
 """
 
-MAX_UNIT_CLUSTERS: Final = 256
-"""Most distinct clusters a unit channel can hold (the uint8 cluster-id range)."""
+MAX_LABEL_VALUES: Final = 2**16
+"""Most distinct labels an event channel can hold (the u2 range).
+
+A modern sorter on a high-density probe passes 256 units without trying, which
+is what the old u1 column allowed.
+"""
 
 FLOAT32_BYTES: Final = 4
 """Byte width of one float32 sample, for shard-size computation."""
@@ -58,8 +62,8 @@ FLOAT32_BYTES: Final = 4
 INT64_BYTES: Final = 8
 """Byte width of one int64 event timestamp, for shard-size computation."""
 
-UINT8_BYTES: Final = 1
-"""Byte width of one uint8 cluster id, for shard-size computation."""
+UINT16_BYTES: Final = 2
+"""Byte width of one uint16 label, for shard-size computation."""
 
 MICROSECONDS_PER_SECOND: Final = 1_000_000.0
 """Microseconds in one second, for converting a sample rate to a period."""

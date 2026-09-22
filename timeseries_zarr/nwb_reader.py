@@ -11,7 +11,7 @@ from pynwb.ecephys import ElectricalSeries
 from pynwb.misc import Units
 
 from timeseries_zarr.constants import (
-    MAX_UNIT_CLUSTERS,
+    MAX_LABEL_VALUES,
     MICROSECONDS_PER_SECOND,
     UNIT_TO_UV,
 )
@@ -196,7 +196,7 @@ class NwbUnitSource:
 
     Flattens the table's per-cluster rows into the per-event streams the
     bundle stores: all spikes merged into one timestamp series sorted
-    ascending, each event tagged with its cluster's dense uint8 id in table
+    ascending, each event tagged with its cluster's dense u2 label in table
     row order (not the upstream unit id) and carrying that cluster's
     waveform_mean.
     """
@@ -212,11 +212,13 @@ class NwbUnitSource:
         waveform_rate_hz is the sample rate within a waveform; the table
         carries no rate of its own. session_start_time places event timestamps
         in absolute microseconds. Raises ValueError if the table holds more
-        than 256 units, past the uint8 cluster-id range.
+        labels than the u2 column can address.
         """
         unit_count = len(units)
-        if unit_count > MAX_UNIT_CLUSTERS:
-            raise ValueError("a unit channel holds at most 256 clusters")
+        if unit_count > MAX_LABEL_VALUES:
+            raise ValueError(
+                f"an event channel holds at most {MAX_LABEL_VALUES} labels"
+            )
 
         self._id = str(units.name)
         self._rate_hz = float(waveform_rate_hz)
@@ -226,7 +228,7 @@ class NwbUnitSource:
 
         session_s = session_start_time.timestamp()
         times: list[npt.NDArray[np.float64]] = []
-        clusters: list[npt.NDArray[np.uint8]] = []
+        clusters: list[npt.NDArray[np.uint16]] = []
         waveforms: list[npt.NDArray[np.float32]] = []
         for cluster_id in range(unit_count):
             spike_times: npt.NDArray[np.float64] = np.asarray(
@@ -237,7 +239,7 @@ class NwbUnitSource:
             )
             count = spike_times.shape[0]
             times.append(spike_times)
-            clusters.append(np.full(count, cluster_id, dtype=np.uint8))
+            clusters.append(np.full(count, cluster_id, dtype=np.uint16))
             waveforms.append(np.broadcast_to(mean, (count, mean.shape[0])))
 
         all_times = np.concatenate(times)
@@ -247,7 +249,7 @@ class NwbUnitSource:
             .round()
             .astype(np.int64)
         )
-        self._units = np.concatenate(clusters)[order]
+        self._labels = np.concatenate(clusters)[order]
         self._waveforms = np.concatenate(waveforms)[order]
 
     @property
@@ -293,13 +295,13 @@ class NwbUnitSource:
         """
         return self._events[start:stop]
 
-    def read_units(self, start: int, stop: int) -> npt.NDArray[np.uint8]:
-        """Return the half-open [start, stop) window of per-event cluster ids.
+    def read_labels(self, start: int, stop: int) -> npt.NDArray[np.uint16]:
+        """Return the half-open [start, stop) window of per-event labels.
 
-        Aligned with the events at the same indices. An empty range yields a
-        length-0 array.
+        The cluster that produced each spike, aligned with the events at the
+        same indices. An empty range yields a length-0 array.
         """
-        return self._units[start:stop]
+        return self._labels[start:stop]
 
     def read_waveforms(self, start: int, stop: int) -> npt.NDArray[np.float32]:
         """Return float32 waveforms for events [start, stop).

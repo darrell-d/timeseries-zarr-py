@@ -9,7 +9,9 @@ from timeseries_zarr.constants import (
     TARGET_SHARD_BYTES,
 )
 
-type ChannelKind = Literal["continuous", "unit"]
+type ChannelKind = Literal["continuous", "event"]
+"""What a channel holds. Spikes and annotations are both event channels;
+which columns are present, not the kind, decides what a view can draw."""
 
 
 @dataclass(frozen=True, slots=True)

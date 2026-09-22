@@ -12,6 +12,7 @@ from pynwb.testing.mock.device import mock_Device
 from pynwb.testing.mock.ecephys import mock_ElectricalSeries
 from pynwb.testing.mock.file import mock_NWBFile
 
+import timeseries_zarr.nwb_reader as nwb_reader_module
 from timeseries_zarr.nwb_reader import (
     NwbContinuousSource,
     NwbTimeSeriesSource,
@@ -277,11 +278,11 @@ def test_unit_read_events_window_is_a_subset():
     assert np.array_equal(src.read_events(1, 3), src.read_events(0, 5)[1:3])
 
 
-def test_unit_read_units_are_dense_cluster_ids_aligned_with_events():
+def test_unit_read_labels_are_dense_cluster_ids_aligned_with_events():
     src = NwbUnitSource(_make_units(_TWO_UNITS), 30000.0, STARTED)
-    units = src.read_units(0, 5)
-    assert units.dtype == np.uint8
-    assert np.array_equal(units, np.array(_SORTED_CLUSTERS, dtype=np.uint8))
+    labels = src.read_labels(0, 5)
+    assert labels.dtype == np.uint16
+    assert np.array_equal(labels, np.array(_SORTED_CLUSTERS, dtype=np.uint16))
 
 
 def test_unit_read_waveforms_broadcasts_each_clusters_mean():
@@ -304,9 +305,19 @@ def test_unit_read_waveforms_empty_range_keeps_point_axis():
     assert src.read_waveforms(2, 2).shape == (0, 4)
 
 
-def test_unit_init_rejects_more_than_256_units():
-    specs = [([float(i)], [0.0]) for i in range(257)]
-    with pytest.raises(ValueError):
+def test_unit_init_accepts_more_than_256_labels():
+    """The old u1 column capped a sort at 256, which a dense probe passes."""
+    specs = [([float(i)], [0.0]) for i in range(300)]
+    src = NwbUnitSource(_make_units(specs), 30000.0, STARTED)
+    assert src.num_events() == 300
+    assert src.read_labels(0, 300).max() == 299
+
+
+def test_unit_init_rejects_more_labels_than_u2_can_address(monkeypatch):
+    # Building 65537 units is not worth the runtime; lower the ceiling.
+    monkeypatch.setattr(nwb_reader_module, "MAX_LABEL_VALUES", 2)
+    specs = [([float(i)], [0.0]) for i in range(3)]
+    with pytest.raises(ValueError, match="at most"):
         NwbUnitSource(_make_units(specs), 30000.0, STARTED)
 
 

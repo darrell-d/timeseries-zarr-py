@@ -93,8 +93,12 @@ class UnitChannelSource(Protocol):
         """Return the [start, stop) window of absolute-microsecond timestamps."""
         ...
 
-    def read_units(self, start: int, stop: int) -> npt.NDArray[np.uint8]:
-        """Return the half-open [start, stop) window of per-event cluster ids."""
+    def read_labels(self, start: int, stop: int) -> npt.NDArray[np.uint16]:
+        """Return the half-open [start, stop) window of per-event labels.
+
+        Cluster ids for sorted spikes. u2, so a high-density sort is not
+        capped at 256.
+        """
         ...
 
     def read_waveforms(self, start: int, stop: int) -> npt.NDArray[np.float32]:

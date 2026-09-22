@@ -1,4 +1,4 @@
-"""Compose streaming and zarr I/O to write one unit (spike) channel's arrays.
+"""Compose streaming and zarr I/O to write one unit (spike) event channel.
 
 Each array writer takes its chunk and shard shapes from sizing and streams the
 source's rows in. An empty source (no events) creates the array and writes
@@ -11,7 +11,11 @@ import numpy as np
 import numpy.typing as npt
 
 from timeseries_zarr.attrs import channel_group_attrs, waveform_array_attrs
-from timeseries_zarr.constants import FLOAT32_BYTES, INT64_BYTES, UINT8_BYTES
+from timeseries_zarr.constants import (
+    FLOAT32_BYTES,
+    INT64_BYTES,
+    UINT16_BYTES,
+)
 from timeseries_zarr.planning import sample_period_us
 from timeseries_zarr.protocols import UnitChannelSource
 from timeseries_zarr.sizing import chunk_and_shard
@@ -98,22 +102,22 @@ def write_events_array(
     return array
 
 
-def write_units_array(
+def write_labels_array(
     group: ZarrGroup,
     source: UnitChannelSource,
     sizing: ChunkShard,
     zstd_level: int,
 ) -> ZarrArray:
-    """Create the units array under group and stream the source's cluster ids in.
+    """Create the labels array under group and stream the source's labels in.
 
-    A rank-1 uint8 array named "units", with no custom attributes. Row k
-    classifies the event at events[k].
+    A rank-1 uint16 array named "labels", with no custom attributes. Row k
+    categorizes the event at events[k]: a cluster id for a sorted spike.
     """
     array = create_array(
         group=group,
-        name="units",
+        name="labels",
         shape=(source.num_events(),),
-        dtype=np.uint8,
+        dtype=np.uint16,
         chunk_shape=sizing.chunk_shape,
         shard_shape=sizing.shard_shape,
         attrs={},
@@ -124,7 +128,7 @@ def write_units_array(
         array,
         source.num_events(),
         sizing.shard_shape[0],
-        source.read_units,
+        source.read_labels,
     )
     return array
 
@@ -174,10 +178,10 @@ def write_unit_channel(
     """Write one unit channel as the subgroup named str(index).
 
     Creates the channel group under parent carrying its unit-kind attributes,
-    then writes the events, units, and waveforms arrays from the source, each
+    then writes the events, labels, and waveforms arrays from the source, each
     sized and compressed per opts. The waveform period comes from the source's
     sample rate. num_events sizes all three arrays, so the source must keep
-    events, units, and waveforms the same length.
+    events, labels, and waveforms the same length.
 
     onset_us is the bundle's onset in wall-clock microseconds; the channel
     offset and every event timestamp are stored as distances from it.
@@ -186,7 +190,7 @@ def write_unit_channel(
         source.id,
         source.rate_hz(),
         source.start_us() - onset_us,
-        "unit",
+        "event",
         source.name,
         source.unit,
     )
@@ -209,10 +213,10 @@ def write_unit_channel(
         _sizing((n,), INT64_BYTES),
         opts.zstd_level,
     )
-    write_units_array(
+    write_labels_array(
         group,
         source,
-        _sizing((n,), UINT8_BYTES),
+        _sizing((n,), UINT16_BYTES),
         opts.zstd_level,
     )
     write_waveforms_array(

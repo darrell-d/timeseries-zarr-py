@@ -97,8 +97,8 @@ def test_write_all_channels_dispatches_by_type(
     g = open_group(tmp_path / "bundle")
     assert dict(g["0"].attrs)["kind"] == "continuous"
     assert "raw" in list(g["0"].array_keys())
-    assert dict(g["1"].attrs)["kind"] == "unit"
-    assert sorted(g["1"].array_keys()) == ["events", "units", "waveforms"]
+    assert dict(g["1"].attrs)["kind"] == "event"
+    assert sorted(g["1"].array_keys()) == ["events", "labels", "waveforms"]
 
 
 def test_write_all_channels_empty(tmp_path):
@@ -130,9 +130,9 @@ def test_write_bundle_publishes_mixed_bundle(
     assert not staging.exists()
     g = open_group(final)
     assert dict(g["0"].attrs)["kind"] == "continuous"
-    assert dict(g["1"].attrs)["kind"] == "unit"
+    assert dict(g["1"].attrs)["kind"] == "event"
     assert np.array_equal(g["0"]["raw"][:], samples)
-    assert sorted(g["1"].array_keys()) == ["events", "units", "waveforms"]
+    assert sorted(g["1"].array_keys()) == ["events", "labels", "waveforms"]
 
 
 def test_write_bundle_consolidates_root_inline(tmp_path, continuous_source):

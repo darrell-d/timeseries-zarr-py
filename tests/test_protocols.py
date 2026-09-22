@@ -121,7 +121,7 @@ class FakeUnit:
     def read_events(self, start, stop):
         return np.zeros(stop - start, dtype=np.int64)
 
-    def read_units(self, start, stop):
+    def read_labels(self, start, stop):
         return np.zeros(stop - start, dtype=np.uint8)
 
     def read_waveforms(self, start, stop):
@@ -151,7 +151,7 @@ def test_unit_missing_name_or_unit_is_not_recognized():
         def read_events(self, start, stop):
             return np.zeros(stop - start, dtype=np.int64)
 
-        def read_units(self, start, stop):
+        def read_labels(self, start, stop):
             return np.zeros(stop - start, dtype=np.uint8)
 
         def read_waveforms(self, start, stop):
@@ -179,7 +179,7 @@ def test_unit_missing_method_is_not_recognized():
         def read_events(self, start, stop):
             return np.zeros(stop - start, dtype=np.int64)
 
-        def read_units(self, start, stop):
+        def read_labels(self, start, stop):
             return np.zeros(stop - start, dtype=np.uint8)
 
     assert not isinstance(MissingReadWaveforms(), UnitChannelSource)
