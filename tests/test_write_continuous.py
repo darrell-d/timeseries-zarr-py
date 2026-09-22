@@ -202,7 +202,7 @@ def test_write_continuous_channel_creates_subgroup_with_attrs(
     samples = np.arange(64, dtype=np.float32)
     parent = open_group(tmp_path / "bundle")
     src = continuous_source(samples, id="N:ch:xyz", rate_hz=32000.0, start_us=7)
-    write_continuous_channel(parent, 3, src, opts=_MULTI_OPTS)
+    write_continuous_channel(parent, 3, src, onset_us=0, opts=_MULTI_OPTS)
     grp = open_group(tmp_path / "bundle")["3"]
     assert dict(grp.attrs) == channel_group_attrs(
         "N:ch:xyz", 32000.0, 7, "continuous", src.name, src.unit
@@ -215,7 +215,7 @@ def test_write_continuous_channel_level0_round_trips(
     samples = np.arange(64, dtype=np.float32)
     parent = open_group(tmp_path / "bundle")
     write_continuous_channel(
-        parent, 0, continuous_source(samples), opts=_MULTI_OPTS
+        parent, 0, continuous_source(samples), onset_us=0, opts=_MULTI_OPTS
     )
     assert np.array_equal(open_group(tmp_path / "bundle")["0"]["0"][:], samples)
 
@@ -226,7 +226,7 @@ def test_write_continuous_channel_each_level_folds_from_below(
     samples = np.arange(64, dtype=np.float32)
     parent = open_group(tmp_path / "bundle")
     write_continuous_channel(
-        parent, 0, continuous_source(samples), opts=_MULTI_OPTS
+        parent, 0, continuous_source(samples), onset_us=0, opts=_MULTI_OPTS
     )
     grp = open_group(tmp_path / "bundle")["0"]
     n_levels = len(plan_levels(64, 31.25, 8, 2))
@@ -242,7 +242,7 @@ def test_write_continuous_channel_level_arrays_and_periods(
     samples = np.arange(64, dtype=np.float32)
     parent = open_group(tmp_path / "bundle")
     write_continuous_channel(
-        parent, 0, continuous_source(samples), opts=_MULTI_OPTS
+        parent, 0, continuous_source(samples), onset_us=0, opts=_MULTI_OPTS
     )
     grp = open_group(tmp_path / "bundle")["0"]
     plans = plan_levels(64, 31.25, 8, 2)
@@ -258,7 +258,7 @@ def test_write_continuous_channel_degenerate_single_level(
     samples = np.arange(3, dtype=np.float32)
     parent = open_group(tmp_path / "bundle")
     write_continuous_channel(
-        parent, 0, continuous_source(samples), opts=WriteOpts()
+        parent, 0, continuous_source(samples), onset_us=0, opts=WriteOpts()
     )
     grp = open_group(tmp_path / "bundle")["0"]
     assert list(grp.array_keys()) == ["0"]
@@ -269,7 +269,9 @@ def test_write_continuous_channel_empty_source_writes_empty_level0(
     tmp_path, continuous_source
 ):
     parent = open_group(tmp_path / "bundle")
-    write_continuous_channel(parent, 0, continuous_source([]), opts=WriteOpts())
+    write_continuous_channel(
+        parent, 0, continuous_source([]), onset_us=0, opts=WriteOpts()
+    )
     grp = open_group(tmp_path / "bundle")["0"]
     assert list(grp.array_keys()) == ["0"]
     assert grp["0"].shape == (0,)
@@ -281,7 +283,7 @@ def test_write_continuous_channel_all_zero_source_writes_every_shard(
     samples = np.zeros(64, dtype=np.float32)
     parent = open_group(tmp_path / "bundle")
     write_continuous_channel(
-        parent, 0, continuous_source(samples), opts=_MULTI_OPTS
+        parent, 0, continuous_source(samples), onset_us=0, opts=_MULTI_OPTS
     )
     grp = open_group(tmp_path / "bundle")["0"]
     assert len(list(grp.array_keys())) >= 3
@@ -299,7 +301,7 @@ def test_write_continuous_channel_returns_none(tmp_path, continuous_source):
     samples = np.arange(64, dtype=np.float32)
     parent = open_group(tmp_path / "bundle")
     result = write_continuous_channel(
-        parent, 0, continuous_source(samples), opts=_MULTI_OPTS
+        parent, 0, continuous_source(samples), onset_us=0, opts=_MULTI_OPTS
     )
     assert result is None
 

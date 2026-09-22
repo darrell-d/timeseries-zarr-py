@@ -20,7 +20,7 @@ def test_channel_group_attrs(kind):
     assert attrs == {
         "id": "N:channel:abc",
         "rate_hz": 32000.0,
-        "start_us": 1000,
+        "offset_us": 1000,
         "kind": kind,
         "name": "channel one",
         "unit": "uV",

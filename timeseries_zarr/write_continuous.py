@@ -125,6 +125,7 @@ def write_continuous_channel(
     index: int,
     source: ContinuousChannelSource,
     *,
+    onset_us: int,
     opts: WriteOpts,
 ) -> None:
     """Write one continuous channel as the subgroup named str(index).
@@ -134,11 +135,15 @@ def write_continuous_channel(
     level from the one written below it. The pyramid is planned from the
     source's sample count and rate; every level array is sized and compressed
     per opts.
+
+    onset_us is the bundle's onset in wall-clock microseconds. The channel
+    records its distance from it, not its own wall-clock start: no absolute
+    time may appear outside meta/.
     """
     attributes = channel_group_attrs(
         source.id,
         source.rate_hz(),
-        source.start_us(),
+        source.start_us() - onset_us,
         "continuous",
         source.name,
         source.unit,

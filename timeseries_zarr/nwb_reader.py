@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Iterator, Sequence
-from datetime import datetime
+from datetime import date, datetime
 
 import numpy as np
 import numpy.typing as npt
@@ -26,6 +26,7 @@ from timeseries_zarr.nwb_series import (
     start_us,
 )
 from timeseries_zarr.nwb_timestamped import NwbTimestampedSource
+from timeseries_zarr.types import RecordingMeta
 
 logger = logging.getLogger(__name__)
 
@@ -433,3 +434,58 @@ def build_sources_from_nwb(
 
     _require_unique_ids([*continuous, *units])
     return continuous, units
+
+
+def _jsonable(value: object) -> object:
+    """Return value as something json.dumps can write, dates as ISO strings."""
+    return value.isoformat() if isinstance(value, date | datetime) else value
+
+
+def _present(fields: dict[str, object]) -> dict[str, object]:
+    """Drop the keys NWB left unset, so meta/ shows only what the file knew."""
+    return {
+        key: _jsonable(value)
+        for key, value in fields.items()
+        if value is not None
+    }
+
+
+def build_meta_from_nwb(nwbfile: NWBFile) -> RecordingMeta:
+    """Return the recording metadata for the bundle's meta/ group.
+
+    Everything identifying that this writer carries across from NWB lands here
+    and nowhere else, which is what makes deleting one directory a complete
+    de-identification. The content is deliberately unschematized, so the NWB
+    subject table crosses over nearly verbatim.
+
+    session.start_us is not set here. The bundle's onset is the earliest start
+    across every channel, which only the bundle knows.
+    """
+    subject = nwbfile.subject
+    return RecordingMeta(
+        subject=_present(
+            {
+                "subject_id": subject.subject_id,
+                "species": subject.species,
+                "sex": subject.sex,
+                "age": subject.age,
+                "description": subject.description,
+                "date_of_birth": subject.date_of_birth,
+            }
+            if subject is not None
+            else {}
+        ),
+        session=_present(
+            {
+                "session_id": nwbfile.session_id,
+                "description": nwbfile.session_description,
+                "identifier": nwbfile.identifier,
+            }
+        ),
+        source=_present(
+            {
+                "converter": "timeseries-zarr-py",
+                "devices": sorted(nwbfile.devices) or None,
+            }
+        ),
+    )

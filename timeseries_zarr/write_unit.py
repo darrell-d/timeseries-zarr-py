@@ -52,14 +52,17 @@ def _write_source_blocks[T: np.generic](
 def write_events_array(
     group: ZarrGroup,
     source: UnitChannelSource,
+    onset_us: int,
     sizing: ChunkShard,
     zstd_level: int,
 ) -> ZarrArray:
     """Create the events array under group and stream the source's timestamps in.
 
-    A rank-1 int64 array named "events" of absolute-microsecond timestamps,
-    with no custom attributes. Raises ValueError if the timestamps are not
-    non-decreasing, including across a block boundary.
+    A rank-1 int64 array named "events", with no custom attributes. The
+    source reports wall-clock microseconds and the array stores the distance
+    from onset_us instead, because no absolute time may appear outside
+    meta/. Raises ValueError if the timestamps are not non-decreasing,
+    including across a block boundary.
     """
     array = create_array(
         group=group,
@@ -71,6 +74,10 @@ def write_events_array(
         attrs={},
         zstd_level=zstd_level,
     )
+
+    def _read_relative(start: int, stop: int) -> npt.NDArray[np.int64]:
+        return source.read_events(start, stop) - onset_us
+
     prev_last: np.int64 | None = None
 
     def _check_ascending(block: npt.NDArray[np.int64]) -> None:
@@ -85,7 +92,7 @@ def write_events_array(
         array,
         source.num_events(),
         sizing.shard_shape[0],
-        source.read_events,
+        _read_relative,
         _check_ascending,
     )
     return array
@@ -161,6 +168,7 @@ def write_unit_channel(
     index: int,
     source: UnitChannelSource,
     *,
+    onset_us: int,
     opts: WriteOpts,
 ) -> None:
     """Write one unit channel as the subgroup named str(index).
@@ -170,11 +178,14 @@ def write_unit_channel(
     sized and compressed per opts. The waveform period comes from the source's
     sample rate. num_events sizes all three arrays, so the source must keep
     events, units, and waveforms the same length.
+
+    onset_us is the bundle's onset in wall-clock microseconds; the channel
+    offset and every event timestamp are stored as distances from it.
     """
     attributes = channel_group_attrs(
         source.id,
         source.rate_hz(),
-        source.start_us(),
+        source.start_us() - onset_us,
         "unit",
         source.name,
         source.unit,
@@ -194,6 +205,7 @@ def write_unit_channel(
     write_events_array(
         group,
         source,
+        onset_us,
         _sizing((n,), INT64_BYTES),
         opts.zstd_level,
     )

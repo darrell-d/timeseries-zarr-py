@@ -4,11 +4,17 @@ import shutil
 from collections.abc import Sequence
 from pathlib import Path
 
+from timeseries_zarr.attrs import meta_group_attrs
 from timeseries_zarr.protocols import ContinuousChannelSource, UnitChannelSource
-from timeseries_zarr.types import WriteOpts
+from timeseries_zarr.types import RecordingMeta, WriteOpts
 from timeseries_zarr.write_continuous import write_continuous_channel
 from timeseries_zarr.write_unit import write_unit_channel
-from timeseries_zarr.zarr_io import ZarrGroup, consolidate, open_group
+from timeseries_zarr.zarr_io import (
+    ZarrGroup,
+    consolidate,
+    open_group,
+    write_meta_group,
+)
 
 
 def assign_indices(
@@ -21,6 +27,19 @@ def assign_indices(
     channel-group directories. Sources keep their input order within each kind.
     """
     return list(enumerate([*continuous, *units]))
+
+
+def bundle_onset_us(
+    sources: Sequence[ContinuousChannelSource | UnitChannelSource],
+) -> int:
+    """Return the bundle's onset: the earliest wall-clock start of any channel.
+
+    Every channel then records its distance from this one instant, and the
+    instant itself is written only into meta/. Taking the earliest keeps
+    every offset at or above zero. A bundle with no channels has no onset
+    and reports 0.
+    """
+    return min((source.start_us() for source in sources), default=0)
 
 
 def atomic_publish(staging_dir: Path, final_dir: Path) -> None:
@@ -50,18 +69,23 @@ def atomic_publish(staging_dir: Path, final_dir: Path) -> None:
 def write_all_channels(
     root: ZarrGroup,
     indexed: Sequence[tuple[int, ContinuousChannelSource | UnitChannelSource]],
+    onset_us: int,
     opts: WriteOpts,
 ) -> None:
     """Write every indexed channel under root, dispatching by source type.
 
     Each (index, source) pair becomes its own channel group beneath root,
-    governed by opts.
+    governed by opts and placed relative to onset_us.
     """
     for index, source in indexed:
         if isinstance(source, UnitChannelSource):
-            write_unit_channel(root, index, source, opts=opts)
+            write_unit_channel(
+                root, index, source, onset_us=onset_us, opts=opts
+            )
         else:
-            write_continuous_channel(root, index, source, opts=opts)
+            write_continuous_channel(
+                root, index, source, onset_us=onset_us, opts=opts
+            )
 
 
 def write_bundle(
@@ -71,13 +95,37 @@ def write_bundle(
     staging_dir: Path,
     final_dir: Path,
     opts: WriteOpts,
+    meta: RecordingMeta | None = None,
 ) -> None:
     """Build the whole viewer bundle and publish it atomically.
 
     Every channel is staged into a fresh root group at staging_dir before the
     rename onto final_dir. Sizing and compression follow opts.
+
+    The bundle's timeline is relative to the earliest channel start, and that
+    one wall-clock instant is written into meta/ as session.start_us. meta is
+    optional: without it the bundle is a pure relative timeline, which stays
+    fully reviewable and carries no identity at all.
+
+    1. Stage every channel, placed relative to the onset.
+    2. Consolidate, which inlines every descendant into the root object.
+    3. Write meta/ afterwards, so consolidation cannot copy identity into
+       that root object and deleting the directory stays sufficient.
+    4. Publish.
     """
+    indexed = assign_indices(continuous, units)
+    onset_us = bundle_onset_us([source for _, source in indexed])
+
     root = open_group(staging_dir)
-    write_all_channels(root, assign_indices(continuous, units), opts)
+    write_all_channels(root, indexed, onset_us, opts)
     consolidate(root)
+    if meta is not None:
+        write_meta_group(
+            staging_dir,
+            meta_group_attrs(
+                meta.subject,
+                {**meta.session, "start_us": onset_us},
+                meta.source,
+            ),
+        )
     atomic_publish(staging_dir, final_dir)

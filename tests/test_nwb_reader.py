@@ -5,6 +5,7 @@ import pytest
 from hdmf.common import DynamicTableRegion
 from pynwb import TimeSeries
 from pynwb.ecephys import ElectricalSeries
+from pynwb.file import Subject
 from pynwb.misc import Units
 from pynwb.testing.mock.base import mock_TimeSeries
 from pynwb.testing.mock.device import mock_Device
@@ -15,6 +16,7 @@ from timeseries_zarr.nwb_reader import (
     NwbContinuousSource,
     NwbTimeSeriesSource,
     NwbUnitSource,
+    build_meta_from_nwb,
     build_sources_from_nwb,
 )
 
@@ -580,3 +582,47 @@ def test_build_reports_a_series_sampled_by_timestamps():
     )
     with pytest.raises(ValueError, match="irregular sampling.*irregular"):
         build_sources_from_nwb(nwb)
+
+
+def test_build_meta_from_nwb_carries_the_subject_across():
+    nwb = mock_NWBFile(
+        subject=Subject(
+            subject_id="sub-01",
+            species="Homo sapiens",
+            sex="F",
+            age="P41Y",
+            date_of_birth=datetime(1985, 3, 2, tzinfo=UTC),
+        )
+    )
+    meta = build_meta_from_nwb(nwb)
+    assert meta.subject["subject_id"] == "sub-01"
+    assert meta.subject["species"] == "Homo sapiens"
+    assert meta.subject["sex"] == "F"
+    # A date has to survive as JSON text, not as a datetime object.
+    assert meta.subject["date_of_birth"] == "1985-03-02T00:00:00+00:00"
+
+
+def test_build_meta_from_nwb_without_a_subject():
+    meta = build_meta_from_nwb(mock_NWBFile())
+    assert meta.subject == {}
+    assert "identifier" in meta.session
+
+
+def test_build_meta_from_nwb_drops_unset_fields():
+    nwb = mock_NWBFile(subject=Subject(subject_id="sub-01"))
+    meta = build_meta_from_nwb(nwb)
+    # NWB leaves most of the subject table None; meta/ shows only what it knew.
+    assert set(meta.subject) == {"subject_id"}
+
+
+def test_build_meta_from_nwb_records_the_converter_and_devices():
+    nwb = mock_NWBFile()
+    mock_Device(name="amp-1", nwbfile=nwb)
+    meta = build_meta_from_nwb(nwb)
+    assert meta.source["converter"] == "timeseries-zarr-py"
+    assert meta.source["devices"] == ["amp-1"]
+
+
+def test_build_meta_from_nwb_carries_no_start_us():
+    # The onset is the earliest channel start, which only the bundle knows.
+    assert "start_us" not in build_meta_from_nwb(mock_NWBFile()).session

@@ -9,7 +9,10 @@ from pynwb import NWBHDF5IO
 
 from timeseries_zarr.bundle import write_bundle
 from timeseries_zarr.config import load_config
-from timeseries_zarr.nwb_reader import build_sources_from_nwb
+from timeseries_zarr.nwb_reader import (
+    build_meta_from_nwb,
+    build_sources_from_nwb,
+)
 from timeseries_zarr.properties import write_properties
 
 logger = logging.getLogger(__name__)
@@ -35,6 +38,7 @@ def main(argv: Sequence[str]) -> int:
         with NWBHDF5IO(str(cfg.nwb_path), mode="r") as io:
             nwbfile = io.read()
             continuous, units = build_sources_from_nwb(nwbfile)
+            meta = build_meta_from_nwb(nwbfile)
             logger.info(
                 "writing %d continuous + %d unit channels to %s",
                 len(continuous),
@@ -47,6 +51,7 @@ def main(argv: Sequence[str]) -> int:
                 staging_dir=cfg.staging_dir,
                 final_dir=cfg.final_dir,
                 opts=cfg.opts,
+                meta=meta,
             )
         write_properties(cfg.properties_path, cfg.final_dir)
     except (OSError, ValueError):

@@ -1,5 +1,6 @@
 """Zarr v3 calls for the writer."""
 
+import json
 from pathlib import Path
 from typing import Any, cast
 
@@ -76,6 +77,25 @@ def write_region(
     the array's bounds.
     """
     array[start : start + block.shape[0]] = block
+
+
+def write_meta_group(root_path: Path, attributes: dict[str, object]) -> None:
+    """Write meta/zarr.json under root_path as a plain JSON group node.
+
+    Written straight to the filesystem rather than through the Group API,
+    and only after consolidate() has run, so the identity it holds never
+    reaches the root object every cache and CDN touches. Consolidating it
+    would inline a copy there and "rm -r meta/" would stop being enough to
+    de-identify the bundle.
+    """
+    node = {
+        "zarr_format": 3,
+        "node_type": "group",
+        "attributes": attributes,
+    }
+    meta_dir = root_path / "meta"
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    (meta_dir / "zarr.json").write_text(json.dumps(node, indent=2) + "\n")
 
 
 def consolidate(root: Group) -> None:

@@ -68,8 +68,15 @@ the Zarr v3 API surface this package depends on sits in one file.
 
 ## Orchestration
 
-`bundle.py` runs the whole job: assign channel indices, write each channel, consolidate
-metadata, publish atomically.
+`bundle.py` runs the whole job: assign channel indices, take the bundle's onset as the
+earliest channel start, write each channel relative to it, consolidate metadata, write
+`meta/`, publish atomically.
+
+The order of the last three is load-bearing. A bundle's timeline is onset-relative and the
+one wall-clock instant lives in `meta/session.start_us`, so deleting that directory
+de-identifies the bundle. That only holds while `meta/` stays out of the root's
+consolidated metadata, which is why it is written after consolidation and straight to the
+filesystem rather than through the Group API.
 
 `main.py` and `config.py` are the CLI and environment-config shell around it.
 `config.py` resolves both invocation forms, positional arguments and the

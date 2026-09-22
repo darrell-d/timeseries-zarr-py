@@ -93,7 +93,7 @@ def test_write_all_channels_dispatches_by_type(
     root = open_group(tmp_path / "bundle")
     cont = continuous_source(np.arange(64, dtype=np.float32), id="c0")
     unit = unit_source(np.arange(5, dtype=np.int64), id="u0")
-    write_all_channels(root, assign_indices([cont], [unit]), _OPTS)
+    write_all_channels(root, assign_indices([cont], [unit]), 0, _OPTS)
     g = open_group(tmp_path / "bundle")
     assert dict(g["0"].attrs)["kind"] == "continuous"
     assert "0" in list(g["0"].array_keys())
@@ -103,7 +103,7 @@ def test_write_all_channels_dispatches_by_type(
 
 def test_write_all_channels_empty(tmp_path):
     root = open_group(tmp_path / "bundle")
-    write_all_channels(root, [], _OPTS)
+    write_all_channels(root, [], 0, _OPTS)
     assert list(open_group(tmp_path / "bundle").group_keys()) == []
 
 
@@ -112,7 +112,7 @@ def test_write_all_channels_returns_none(tmp_path, continuous_source):
     indexed = assign_indices(
         [continuous_source(np.arange(8, dtype=np.float32))], []
     )
-    assert write_all_channels(root, indexed, _OPTS) is None
+    assert write_all_channels(root, indexed, 0, _OPTS) is None
 
 
 def test_write_bundle_publishes_mixed_bundle(

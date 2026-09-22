@@ -13,6 +13,21 @@ type ChannelKind = Literal["continuous", "unit"]
 
 
 @dataclass(frozen=True, slots=True)
+class RecordingMeta:
+    """Recording-level metadata for the bundle's meta/ group.
+
+    Everything identifying a bundle carries lives in these three objects and
+    nowhere else, so that deleting one directory de-identifies it. session
+    gains start_us when the bundle is written; the onset is the earliest
+    start across every channel, which only the bundle knows.
+    """
+
+    subject: dict[str, object]
+    session: dict[str, object]
+    source: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True)
 class LevelPlan:
     """Resolved shape and time resolution of one pyramid level of a channel.
 

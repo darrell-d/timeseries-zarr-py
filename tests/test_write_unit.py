@@ -21,7 +21,7 @@ def _sizing():
 def test_write_events_array_round_trips(tmp_path, unit_source):
     events = np.array([0, 10, 25, 25, 40, 100, 1000], dtype=np.int64)
     group = open_group(tmp_path / "bundle")
-    write_events_array(group, unit_source(events), _sizing(), 5)
+    write_events_array(group, unit_source(events), 0, _sizing(), 5)
     stored = open_group(tmp_path / "bundle")["events"][:]
     assert np.array_equal(stored, events)
     assert stored.dtype == np.int64
@@ -32,7 +32,7 @@ def test_write_events_array_creates_named_array_with_shape_and_dtype(
 ):
     events = np.array([0, 10, 25, 40], dtype=np.int64)
     group = open_group(tmp_path / "bundle")
-    write_events_array(group, unit_source(events), _sizing(), 5)
+    write_events_array(group, unit_source(events), 0, _sizing(), 5)
     arr = open_group(tmp_path / "bundle")["events"]
     assert arr.shape == (4,)
     assert arr.dtype == np.int64
@@ -41,13 +41,13 @@ def test_write_events_array_creates_named_array_with_shape_and_dtype(
 def test_write_events_array_has_no_custom_attrs(tmp_path, unit_source):
     events = np.array([0, 10, 25, 40], dtype=np.int64)
     group = open_group(tmp_path / "bundle")
-    write_events_array(group, unit_source(events), _sizing(), 5)
+    write_events_array(group, unit_source(events), 0, _sizing(), 5)
     assert dict(open_group(tmp_path / "bundle")["events"].attrs) == {}
 
 
 def test_write_events_array_empty_source(tmp_path, unit_source):
     group = open_group(tmp_path / "bundle")
-    write_events_array(group, unit_source([]), _sizing(), 5)
+    write_events_array(group, unit_source([]), 0, _sizing(), 5)
     arr = open_group(tmp_path / "bundle")["events"]
     assert arr.shape == (0,)
     assert arr.dtype == np.int64
@@ -56,7 +56,7 @@ def test_write_events_array_empty_source(tmp_path, unit_source):
 def test_write_events_array_ties_are_allowed(tmp_path, unit_source):
     events = np.array([5, 5, 5, 5, 5], dtype=np.int64)
     group = open_group(tmp_path / "bundle")
-    write_events_array(group, unit_source(events), _sizing(), 5)
+    write_events_array(group, unit_source(events), 0, _sizing(), 5)
     assert np.array_equal(open_group(tmp_path / "bundle")["events"][:], events)
 
 
@@ -67,7 +67,7 @@ def test_write_events_array_raises_on_descending_within_block(
     events = np.array([0, 1, 5, 3, 8], dtype=np.int64)
     group = open_group(tmp_path / "bundle")
     with pytest.raises(ValueError):
-        write_events_array(group, unit_source(events), _sizing(), 5)
+        write_events_array(group, unit_source(events), 0, _sizing(), 5)
 
 
 def test_write_events_array_raises_on_descending_across_block_boundary(
@@ -77,7 +77,7 @@ def test_write_events_array_raises_on_descending_across_block_boundary(
     events = np.array([0, 1, 2, 3, 2, 5, 6, 7], dtype=np.int64)
     group = open_group(tmp_path / "bundle")
     with pytest.raises(ValueError):
-        write_events_array(group, unit_source(events), _sizing(), 5)
+        write_events_array(group, unit_source(events), 0, _sizing(), 5)
 
 
 def test_write_units_array_round_trips(tmp_path, unit_source):
@@ -195,7 +195,7 @@ def test_write_unit_channel_creates_subgroup_with_attrs(tmp_path, unit_source):
     events = np.arange(5, dtype=np.int64)
     parent = open_group(tmp_path / "bundle")
     src = unit_source(events, id="N:unit:abc", rate_hz=32000.0, start_us=9)
-    write_unit_channel(parent, 2, src, opts=WriteOpts())
+    write_unit_channel(parent, 2, src, onset_us=0, opts=WriteOpts())
     grp = open_group(tmp_path / "bundle")["2"]
     assert dict(grp.attrs) == channel_group_attrs(
         "N:unit:abc", 32000.0, 9, "unit", src.name, src.unit
@@ -207,7 +207,11 @@ def test_write_unit_channel_writes_events_and_units(tmp_path, unit_source):
     units = np.array([1, 2, 3, 4, 5], dtype=np.uint8)
     parent = open_group(tmp_path / "bundle")
     write_unit_channel(
-        parent, 0, unit_source(events, units=units), opts=WriteOpts()
+        parent,
+        0,
+        unit_source(events, units=units),
+        onset_us=0,
+        opts=WriteOpts(),
     )
     grp = open_group(tmp_path / "bundle")["0"]
     assert np.array_equal(grp["events"][:], events)
@@ -223,6 +227,7 @@ def test_write_unit_channel_writes_waveforms_with_period(tmp_path, unit_source):
         parent,
         0,
         unit_source(events, waveforms=waveforms, points_per_event=ppe),
+        onset_us=0,
         opts=WriteOpts(),
     )
     wf = open_group(tmp_path / "bundle")["0"]["waveforms"]
@@ -233,7 +238,11 @@ def test_write_unit_channel_writes_waveforms_with_period(tmp_path, unit_source):
 def test_write_unit_channel_returns_none(tmp_path, unit_source):
     parent = open_group(tmp_path / "bundle")
     result = write_unit_channel(
-        parent, 0, unit_source(np.arange(3, dtype=np.int64)), opts=WriteOpts()
+        parent,
+        0,
+        unit_source(np.arange(3, dtype=np.int64)),
+        onset_us=0,
+        opts=WriteOpts(),
     )
     assert result is None
 
@@ -242,7 +251,7 @@ def test_write_unit_channel_zero_events_writes_empty_arrays(
     tmp_path, unit_source
 ):
     parent = open_group(tmp_path / "bundle")
-    write_unit_channel(parent, 5, unit_source([]), opts=WriteOpts())
+    write_unit_channel(parent, 5, unit_source([]), onset_us=0, opts=WriteOpts())
     grp = open_group(tmp_path / "bundle")["5"]
     assert grp["events"].shape == (0,)
     assert grp["units"].shape == (0,)
@@ -261,6 +270,6 @@ def test_write_events_array_writes_one_whole_shard_per_write(
     monkeypatch.setattr("timeseries_zarr.write_unit.write_region", spy)
     events = np.arange(20, dtype=np.int64) * 10
     group = open_group(tmp_path / "bundle")
-    write_events_array(group, unit_source(events), _sizing(), 5)
+    write_events_array(group, unit_source(events), 0, _sizing(), 5)
     assert writes == [(0, 8), (8, 8), (16, 4)]
     assert np.array_equal(open_group(tmp_path / "bundle")["events"][:], events)
