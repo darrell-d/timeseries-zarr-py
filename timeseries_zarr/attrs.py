@@ -17,7 +17,7 @@ def root_attrs() -> dict[str, object]:
 
 def channel_group_attrs(
     id: str,
-    rate_hz: float,
+    rate_hz: float | None,
     offset_us: int,
     kind: ChannelKind,
     name: str = "",
@@ -27,7 +27,8 @@ def channel_group_attrs(
     """Return the channel-group zarr.json attributes for one channel.
 
     offset_us is microseconds from the bundle's onset to this channel's
-    first sample or event, never a wall-clock value.
+    first sample or event, never a wall-clock value. rate_hz is omitted when
+    a channel has no sample rate, which an annotation channel does not.
 
     offset_uv is the DC offset removed from the statistics before folding. It
     is written only when there is one, since the attribute is optional and a
@@ -36,14 +37,44 @@ def channel_group_attrs(
     """
     attributes: dict[str, object] = {
         "id": id,
-        "rate_hz": rate_hz,
         "offset_us": offset_us,
         "kind": kind,
         "name": name,
         "unit": unit,
     }
+    if rate_hz is not None:
+        attributes["rate_hz"] = rate_hz
     if offset_uv:
         attributes["offset_uv"] = offset_uv
+    return attributes
+
+
+def annotation_channel_attrs(
+    id: str,
+    offset_us: int,
+    name: str,
+    unit: str,
+    body_media_type: str | None,
+    max_duration_us: int | None,
+    label_names: list[str] | None,
+) -> dict[str, object]:
+    """Return the channel-group attributes for an annotation event channel.
+
+    No rate_hz: marks are placed by their own timestamps, not sampled. Each
+    optional key is written only when its column is there, since a reader
+    decides what it can draw from which columns a channel carries.
+
+    max_duration_us is what makes a window query find an interval that began
+    before it and has not closed. Without it a reader would need an interval
+    index; with it, it widens its backward search by one number.
+    """
+    attributes = channel_group_attrs(id, None, offset_us, "event", name, unit)
+    if body_media_type is not None:
+        attributes["body_media_type"] = body_media_type
+    if max_duration_us is not None:
+        attributes["max_duration_us"] = max_duration_us
+    if label_names:
+        attributes["label_names"] = label_names
     return attributes
 
 

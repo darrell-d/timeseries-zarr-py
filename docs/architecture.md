@@ -72,8 +72,17 @@ bounded no matter how long the recording is.
 
 ## Write path
 
-`write_continuous.py` and `write_unit.py` each write one channel by composing the stages
-above. They hold the per-channel logic and no Zarr specifics.
+`write_continuous.py`, `write_unit.py` and `write_annotation.py` each write one channel by
+composing the stages above. They hold the per-channel logic and no Zarr specifics.
+
+Spikes and annotations are both event channels; the kind does not say which, and a view
+reads the columns present to decide what it can draw. A spike channel carries events,
+labels and waveforms; an annotation channel carries whichever of durations, labels,
+values, bodies and channel refs its source offers. Bodies and channel refs are stored
+Arrow-style, a flat array plus n+1 offsets, because the count per mark varies from zero
+upward and sharing the boundary between neighbours makes a gap or an overlap
+unrepresentable rather than merely invalid. `counts.py` holds the count pyramid a dense
+event channel carries, streamed because its finest level does not fit in memory.
 
 A continuous channel is the raw samples under `raw/`, then level groups keyed `1/`, `2/`
 and so on, each carrying `period_us` and holding one array per statistic over a shared

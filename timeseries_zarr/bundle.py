@@ -5,8 +5,13 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from timeseries_zarr.attrs import meta_group_attrs
-from timeseries_zarr.protocols import ContinuousChannelSource, UnitChannelSource
+from timeseries_zarr.protocols import (
+    AnnotationChannelSource,
+    ContinuousChannelSource,
+    UnitChannelSource,
+)
 from timeseries_zarr.types import RecordingMeta, WriteOpts
+from timeseries_zarr.write_annotation import write_annotation_channel
 from timeseries_zarr.write_continuous import write_continuous_channel
 from timeseries_zarr.write_unit import write_unit_channel
 from timeseries_zarr.zarr_io import (
@@ -16,21 +21,31 @@ from timeseries_zarr.zarr_io import (
     write_meta_group,
 )
 
+type AnyChannelSource = (
+    ContinuousChannelSource | UnitChannelSource | AnnotationChannelSource
+)
+"""Any channel a bundle can hold, whatever writer handles it."""
+
 
 def assign_indices(
     continuous: Sequence[ContinuousChannelSource],
     units: Sequence[UnitChannelSource],
-) -> list[tuple[int, ContinuousChannelSource | UnitChannelSource]]:
-    """Assign each channel a digit index, continuous first then unit.
+    annotations: Sequence[AnnotationChannelSource] = (),
+) -> list[tuple[int, AnyChannelSource]]:
+    """Assign each channel a digit index: continuous, then unit, then annotation.
 
     Indices are contiguous from 0 and become the bundle's digit-named
     channel-group directories. Sources keep their input order within each kind.
+
+    The order is the one thing channel_refs depends on. An annotation naming
+    a continuous channel names its index, so anything that renumbers channels
+    between this call and the write silently repoints every reference.
     """
-    return list(enumerate([*continuous, *units]))
+    return list(enumerate([*continuous, *units, *annotations]))
 
 
 def bundle_onset_us(
-    sources: Sequence[ContinuousChannelSource | UnitChannelSource],
+    sources: Sequence[AnyChannelSource],
 ) -> int:
     """Return the bundle's onset: the earliest wall-clock start of any channel.
 
@@ -68,7 +83,7 @@ def atomic_publish(staging_dir: Path, final_dir: Path) -> None:
 
 def write_all_channels(
     root: ZarrGroup,
-    indexed: Sequence[tuple[int, ContinuousChannelSource | UnitChannelSource]],
+    indexed: Sequence[tuple[int, AnyChannelSource]],
     onset_us: int,
     opts: WriteOpts,
 ) -> None:
@@ -82,6 +97,10 @@ def write_all_channels(
             write_unit_channel(
                 root, index, source, onset_us=onset_us, opts=opts
             )
+        elif isinstance(source, AnnotationChannelSource):
+            write_annotation_channel(
+                root, index, source, onset_us=onset_us, opts=opts
+            )
         else:
             write_continuous_channel(
                 root, index, source, onset_us=onset_us, opts=opts
@@ -92,6 +111,7 @@ def write_bundle(
     continuous: Sequence[ContinuousChannelSource],
     units: Sequence[UnitChannelSource],
     *,
+    annotations: Sequence[AnnotationChannelSource] = (),
     staging_dir: Path,
     final_dir: Path,
     opts: WriteOpts,
@@ -113,7 +133,7 @@ def write_bundle(
        that root object and deleting the directory stays sufficient.
     4. Publish.
     """
-    indexed = assign_indices(continuous, units)
+    indexed = assign_indices(continuous, units, annotations)
     onset_us = bundle_onset_us([source for _, source in indexed])
 
     root = open_group(staging_dir)
