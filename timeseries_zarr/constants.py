@@ -65,6 +65,15 @@ INT64_BYTES: Final = 8
 UINT16_BYTES: Final = 2
 """Byte width of one uint16 label, for shard-size computation."""
 
+UINT32_BYTES: Final = 4
+"""Byte width of one uint32 bin count, for shard-size computation."""
+
+EVENT_LEVEL_THRESHOLD: Final = 64 * 2**10
+"""Events above which a channel gets a count pyramid rather than raster reads.
+
+Below it a reader binary-searches the events themselves and needs nothing more.
+"""
+
 MICROSECONDS_PER_SECOND: Final = 1_000_000.0
 """Microseconds in one second, for converting a sample rate to a period."""
 

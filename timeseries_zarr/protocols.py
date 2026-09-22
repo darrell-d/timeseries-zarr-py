@@ -85,6 +85,14 @@ class UnitChannelSource(Protocol):
         """Return the total number of spike events."""
         ...
 
+    def num_labels(self) -> int:
+        """Return how many distinct labels the channel can use.
+
+        The width of a count row, so it is the label space rather than the
+        labels actually seen. 0 means the channel carries no labels.
+        """
+        ...
+
     def points_per_event(self) -> int:
         """Return the number of waveform samples stored per event."""
         ...

@@ -32,24 +32,25 @@ class BlockReadableArray(Protocol):
         """Array shape; axis 0 is the iterated sample/bin axis."""
         ...
 
-    def __getitem__(self, item: slice) -> npt.NDArray[np.float32]:
+    def __getitem__(self, item: slice) -> npt.NDArray[Any]:
         """Return the rows in the given axis-0 slice."""
         ...
 
 
-def _rebuffer_and_fold(
-    blocks: Iterable[npt.NDArray[np.floating[Any]]],
-    fold_fn: Callable[[npt.NDArray[np.floating[Any]]], npt.NDArray[np.float64]],
+def _rebuffer_and_fold[TIn: np.generic, TOut: np.generic](
+    blocks: Iterable[npt.NDArray[TIn]],
+    fold_fn: Callable[[npt.NDArray[TIn]], npt.NDArray[TOut]],
     group: int = DECIMATION_FACTOR,
-) -> Iterator[npt.NDArray[np.float64]]:
+) -> Iterator[npt.NDArray[TOut]]:
     """Fold a stream of blocks into the next coarser level.
 
-    Blocks are rank-1 raw runs or rank-2 stat rows. The concatenation of the
-    yielded arrays equals fold_fn applied to the whole concatenated input,
+    Blocks are raw runs, stat rows or count rows; only their axis-0 length
+    matters here. The concatenation of the yielded arrays equals fold_fn
+    applied to the whole concatenated input,
     computed in bounded memory: at most group-1 rows are carried across a block
     boundary.
     """
-    carry: npt.NDArray[np.floating[Any]] | None = None
+    carry: npt.NDArray[Any] | None = None
     for block in blocks:
         # An exhausted carry still concatenates to the block itself, so skip the
         # copy: with shard-aligned inputs that is every iteration but the last.
@@ -102,12 +103,12 @@ def iter_raw_to_level1(
 
 def iter_array_blocks(
     array: BlockReadableArray, block_len: int
-) -> Iterator[npt.NDArray[np.float32]]:
+) -> Iterator[npt.NDArray[Any]]:
     """Yield successive axis-0 windows of an on-disk array.
 
     Walks [0, array.shape[0]) in block_len-sized windows; the final window may
-    be shorter (keep-tail). Works for rank-1 raw and rank-2 (min, max) arrays
-    alike. Yields nothing when the array is empty. Raises ValueError if
+    be shorter (keep-tail). The dtype and trailing shape are whatever the
+    array holds. Yields nothing when the array is empty. Raises ValueError if
     block_len is not positive.
     """
     if block_len <= 0:

@@ -63,6 +63,7 @@ class ArrayUnitSource:
         labels=None,
         waveforms=None,
         points_per_event=4,
+        num_labels=1,
         id="unit-0",
         rate_hz=32000.0,
         start_us=0,
@@ -72,6 +73,7 @@ class ArrayUnitSource:
         self._events = np.asarray(events, dtype=np.int64)
         n = int(self._events.shape[0])
         self._points_per_event = points_per_event
+        self._num_labels = num_labels
         self._labels = (
             np.zeros(n, dtype=np.uint16)
             if labels is None
@@ -96,6 +98,9 @@ class ArrayUnitSource:
 
     def num_events(self):
         return int(self._events.shape[0])
+
+    def num_labels(self):
+        return self._num_labels
 
     def points_per_event(self):
         return self._points_per_event

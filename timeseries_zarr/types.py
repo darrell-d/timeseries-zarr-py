@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from timeseries_zarr.constants import (
+    EVENT_LEVEL_THRESHOLD,
     INNER_CHUNK_SAMPLES,
     MAX_LEVELS,
     TARGET_SHARD_BYTES,
@@ -62,6 +63,8 @@ class WriteOpts:
 
     max_levels and min_bins bound the pyramid; inner_len and
     target_shard_bytes size the inner chunk and the outer shard.
+    event_level_threshold is the event count above which a channel earns a
+    count pyramid at all.
     """
 
     zstd_level: int = 5
@@ -69,3 +72,4 @@ class WriteOpts:
     min_bins: int = 1024
     inner_len: int = INNER_CHUNK_SAMPLES
     target_shard_bytes: int = TARGET_SHARD_BYTES
+    event_level_threshold: int = EVENT_LEVEL_THRESHOLD

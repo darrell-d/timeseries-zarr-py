@@ -221,6 +221,7 @@ class NwbUnitSource:
             )
 
         self._id = str(units.name)
+        self._unit_count = unit_count
         self._rate_hz = float(waveform_rate_hz)
         self._start_us = round(
             session_start_time.timestamp() * MICROSECONDS_PER_SECOND
@@ -282,6 +283,14 @@ class NwbUnitSource:
     def num_events(self) -> int:
         """Return the total number of spike events across all units."""
         return int(self._events.shape[0])
+
+    def num_labels(self) -> int:
+        """Return the number of clusters in the table.
+
+        The label space, not the labels seen: a cluster the sorter kept but
+        that fired nothing still owns a column of the count pyramid.
+        """
+        return self._unit_count
 
     def points_per_event(self) -> int:
         """Return the width of the waveform_mean template, shared by every event."""
