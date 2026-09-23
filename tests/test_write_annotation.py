@@ -414,3 +414,45 @@ def test_channel_refs_address_channels_present_in_the_bundle(
     present = {int(key) for key in root.group_keys() if key.isdigit()}
     for index in root["1"]["channel_refs"][:]:
         assert int(index) in present
+
+
+def test_the_bodies_chunk_object_is_the_payload_file(tmp_path):
+    """cat on it must print text: no Zstd frame, no shard index footer.
+
+    This is what keeps annotation bodies, the one place PHI can hide in a
+    bundle besides meta/, greppable and redactable with ordinary tools.
+    """
+    _write(
+        tmp_path,
+        FakeAnnotations(
+            [1, 2],
+            bodies=[b'{"a":1}', b'{"a":2}'],
+            media_type="application/json",
+        ),
+    )
+    chunk = next(
+        path
+        for path in (tmp_path / "bundle" / "0" / "bodies").rglob("*")
+        if path.is_file() and path.name != "zarr.json"
+    )
+    assert chunk.read_bytes() == b'{"a":1}\n{"a":2}\n'
+
+
+def test_max_duration_us_is_computed_from_what_was_written(tmp_path):
+    """A source that under-reports the bound must not be believed.
+
+    The reader widens its backward search by this number; too small and a
+    window silently misses an interval still open at its left edge.
+    """
+
+    class Understates(FakeAnnotations):
+        def max_duration_us(self):
+            return 1  # a true bound would be 500
+
+    grp = _write(tmp_path, Understates([10, 20], durations=[500, 5]))
+    assert dict(grp.attrs)["max_duration_us"] == 500
+
+
+def test_a_negative_duration_is_rejected(tmp_path):
+    with pytest.raises(ValueError, match="negative"):
+        _write(tmp_path, FakeAnnotations([10], durations=[-1]))

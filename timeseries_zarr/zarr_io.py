@@ -51,6 +51,9 @@ def create_array(
     shard_shape: tuple[int, ...],
     attrs: dict[str, object],
     zstd_level: int,
+    *,
+    compress: bool = True,
+    sharded: bool = True,
 ) -> Array[Any]:
     """Create a v3 sharded, Zstd-compressed array under group with attributes.
 
@@ -60,6 +63,12 @@ def create_array(
     the array's zarr.json verbatim and unprefixed. Every shard written to the
     array reaches disk, including a shard whose values all equal the fill
     value, so a reader never meets a missing shard key.
+
+    compress=False stores the array raw and sharded=False leaves the sharding
+    codec out. Both are needed for the chunk object to be the bytes
+    themselves: compression makes it a Zstd frame (zstd_level=0 included),
+    and sharding appends an index footer. Together they are what lets the
+    bodies chunk be opened as a text file with no tooling.
 
     A float array declares NaN as its fill value and an integer array 0. The
     fill is what Zarr serves for a chunk nobody wrote, and the format defines
@@ -72,8 +81,8 @@ def create_array(
         shape=shape,
         dtype=dtype,
         chunks=chunk_shape,
-        shards=shard_shape,
-        compressors=ZstdCodec(level=zstd_level),
+        shards=shard_shape if sharded else None,
+        compressors=ZstdCodec(level=zstd_level) if compress else None,
         attributes=cast("dict[str, JSON]", attrs),
         fill_value=_fill_value(dtype),
         config={"write_empty_chunks": True},

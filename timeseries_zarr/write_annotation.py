@@ -61,6 +61,8 @@ def _flat_array(
     zstd_level: int,
     *,
     single_chunk: bool = False,
+    compress: bool = True,
+    sharded: bool = True,
 ) -> ZarrArray:
     """Create a rank-1 array and write it in one go.
 
@@ -78,6 +80,8 @@ def _flat_array(
         shard_shape=grid,
         attrs={},
         zstd_level=zstd_level,
+        compress=compress,
+        sharded=sharded,
     )
     if length:
         write_region(array, 0, values)
@@ -209,8 +213,11 @@ def write_annotation_channel(
     events = _read_all(source.read_events, n, step).astype(np.int64) - onset_us
     _write_column(group, EVENTS_KEY, events, INT64_BYTES, opts)
 
+    durations: npt.NDArray[np.int64] | None = None
     if max_duration_us is not None:
         durations = _read_all(source.read_durations, n, step).astype(np.int64)
+        if (durations < 0).any():
+            raise ValueError("a duration cannot be negative")
         _write_column(group, DURATIONS_KEY, durations, INT64_BYTES, opts)
 
     if source.num_labels():
@@ -228,8 +235,24 @@ def write_annotation_channel(
         bodies, body_offsets = pack_bodies(payloads)
         # Uncompressed and unsharded: the chunk object is then the payload file
         # itself, and body_offsets are literal byte ranges into it.
-        _flat_array(group, BODIES_KEY, bodies, 0, single_chunk=True)
+        _flat_array(
+            group,
+            BODIES_KEY,
+            bodies,
+            0,
+            single_chunk=True,
+            compress=False,
+            sharded=False,
+        )
         _write_column(group, BODY_OFFSETS_KEY, body_offsets, INT64_BYTES, opts)
+
+    if durations is not None:
+        # Computed from what was written, never from what the source claimed. A
+        # bound that is too small makes a window query miss an interval still
+        # open at its left edge, and nothing errors when that happens.
+        group.attrs["max_duration_us"] = (
+            int(durations.max()) if durations.size else 0
+        )
 
     if source.has_channel_refs():
         refs: list[npt.NDArray[np.uint16]] = []

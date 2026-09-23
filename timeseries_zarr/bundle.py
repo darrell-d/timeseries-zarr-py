@@ -57,6 +57,24 @@ def bundle_onset_us(
     return min((source.start_us() for source in sources), default=0)
 
 
+def channel_index_by_name(
+    continuous: Sequence[ContinuousChannelSource],
+    units: Sequence[UnitChannelSource],
+) -> dict[str, int]:
+    """Return the display name of each continuous channel to its index.
+
+    What an annotation's channel references resolve against. It shares
+    assign_indices rather than recomputing the order, because the two
+    disagreeing would repoint every reference in a bundle silently.
+    """
+    return {
+        source.name: index
+        for index, source in assign_indices(continuous, units)
+        if isinstance(source, ContinuousChannelSource)
+        and not isinstance(source, UnitChannelSource)
+    }
+
+
 def atomic_publish(staging_dir: Path, final_dir: Path) -> None:
     """Move a fully-staged bundle to its final path in one atomic rename.
 

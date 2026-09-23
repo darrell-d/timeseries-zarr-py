@@ -7,7 +7,8 @@ from collections.abc import Sequence
 
 from pynwb import NWBHDF5IO
 
-from timeseries_zarr.bundle import write_bundle
+from timeseries_zarr.annotation_json import build_annotation_sources
+from timeseries_zarr.bundle import channel_index_by_name, write_bundle
 from timeseries_zarr.config import load_config
 from timeseries_zarr.nwb_reader import (
     build_meta_from_nwb,
@@ -39,10 +40,20 @@ def main(argv: Sequence[str]) -> int:
             nwbfile = io.read()
             continuous, units = build_sources_from_nwb(nwbfile)
             meta = build_meta_from_nwb(nwbfile)
+            # Annotation times are measured from the recording onset, which
+            # is this file's session start.
+            onset_us = round(nwbfile.session_start_time.timestamp() * 1_000_000)
+            annotations = build_annotation_sources(
+                list(cfg.annotation_paths),
+                onset_us,
+                channel_index_by_name=channel_index_by_name(continuous, units),
+            )
             logger.info(
-                "writing %d continuous + %d unit channels to %s",
+                "writing %d continuous + %d unit + %d annotation "
+                "channels to %s",
                 len(continuous),
                 len(units),
+                len(annotations),
                 cfg.final_dir,
             )
             write_bundle(
@@ -50,6 +61,7 @@ def main(argv: Sequence[str]) -> int:
                 units,
                 staging_dir=cfg.staging_dir,
                 final_dir=cfg.final_dir,
+                annotations=annotations,
                 opts=cfg.opts,
                 meta=meta,
             )
