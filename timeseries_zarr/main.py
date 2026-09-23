@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 from pynwb import NWBHDF5IO
 
-from timeseries_zarr.annotation_json import build_annotation_sources
+from timeseries_zarr.annotation_ndjson import build_annotation_sources
 from timeseries_zarr.bundle import channel_index_by_name, write_bundle
 from timeseries_zarr.config import load_config
 from timeseries_zarr.nwb_reader import (

@@ -141,16 +141,17 @@ def _resolve_annotation_paths(
 ) -> tuple[Path, ...]:
     """Return the annotation documents to write alongside the recording.
 
-    Any positional after the first two is one document. With none given, the
-    NWB's own directory is scanned for *.annotations.json, which is the
-    convention the container runs on: an extractor drops its output beside the
-    recording and the writer picks it up without being told.
+    Any positional after the first two is one file. With none given, the
+    NWB's own directory is scanned for *.annotations.ndjson, which is the
+    convention the workflow runs on: the extractor branch drops its output
+    beside the recording at the merge and the writer picks it up without
+    being told.
 
-    One document is one event channel, and the order here is the order they are
+    One file is one event channel, and the order here is the order they are
     indexed in.
     """
     explicit = [Path(argument) for argument in argv[2:]]
     if explicit:
         return tuple(explicit)
     directory = Path(env.get("INPUT_DIR", "")) or nwb_path.parent
-    return tuple(sorted(directory.glob("*.annotations.json")))
+    return tuple(sorted(directory.glob("*.annotations.ndjson")))
