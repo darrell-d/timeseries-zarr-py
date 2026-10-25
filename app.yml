@@ -1,38 +1,29 @@
-# yaml-language-server: $schema=https://app.pennsieve.io/static/schemas/app-manifest.v1.json
-
-schemaVersion: "1.0"
-name: Timeseries Zarr Writer
-description: >-
-  Converts an NWB neurophysiology recording into a pyramid Zarr v3 viewer
-  bundle: a static directory a browser reads over HTTP range requests to render
-  any time window interactively.
-applicationType: processor
-
-categories:
-  - Format Conversion
-  - Visualization
-
-tags:
-  - nwb
-  - zarr
-  - timeseries
-  - neurophysiology
-  - electrophysiology
-  - min-max-envelope
+# yaml-language-server: $schema=https://schemas.pennsieve.io/app-manifest/v1.json
+application:
+  name: Timeseries Zarr Writer
+  description: >-
+    Converts an NWB neurophysiology recording into a pyramid Zarr v3 viewer
+    bundle: a static directory a browser reads over HTTP range requests to render
+    any time window interactively.
+  type: processor
+  tags:
+    - nwb
+    - zarr
+    - timeseries
+    - neurophysiology
+    - electrophysiology
+    - min-max-envelope
+    - conversion
+    - visualization
 
 runtime:
-  computeTypes:
-    - standard
-  gpu:
-    enabled: false
-
-resources:
   cpu: 2048
   memory: 8192
+  computeTypes:
+    - standard
 
 inputs:
   - name: recording
-    dataType: file
     required: true
     description: >-
       One NWB file. The writer reads the single file matching *.nwb in
@@ -40,14 +31,12 @@ inputs:
 
 outputs:
   - name: bundle
-    dataType: directory
     description: >-
       One Zarr v3 bundle written into OUTPUT_DIR, named for the input file stem:
       session.nwb produces session.zarr. The directory appears in one atomic
       rename, so a reader never sees a partial bundle.
 
   - name: properties
-    dataType: file
     description: >-
       Output properties written into OUTPUT_DIR beside the bundle. Its
       root_path key is the top-level directory name of the bundle.
@@ -58,15 +47,15 @@ parameters:
     description: >-
       Name of the output properties file written into OUTPUT_DIR.
     type: string
-    default: asset-properties.json
+    defaultValue: asset-properties.json
 
   - name: ZARR_WRITER_ZSTD_LEVEL
     label: Zstd compression level
     description: >-
       Compression level applied to every array in the bundle. Higher levels
       write a smaller bundle and take longer. Integer values only.
-    type: number
-    default: 5
+    type: integer
+    defaultValue: 5
     min: 0
     max: 22
 
@@ -76,8 +65,8 @@ parameters:
       Upper bound on the number of min/max envelope levels built above the raw
       samples. Each level is 4x coarser than the one below it. Integer values
       only.
-    type: number
-    default: 8
+    type: integer
+    defaultValue: 8
     min: 1
     max: 8
 
@@ -86,8 +75,8 @@ parameters:
     description: >-
       The pyramid stops when the next level would hold fewer complete bins than
       this. Integer values only.
-    type: number
-    default: 1024
+    type: integer
+    defaultValue: 1024
     min: 1
 
   - name: ZARR_WRITER_INNER_LEN
@@ -95,8 +84,8 @@ parameters:
     description: >-
       Length in samples of the inner Zarr chunk, the smallest unit a reader can
       fetch. Integer values only.
-    type: number
-    default: 8192
+    type: integer
+    defaultValue: 8192
     min: 1
 
   - name: ZARR_WRITER_TARGET_SHARD_BYTES
@@ -104,6 +93,6 @@ parameters:
     description: >-
       Target size in bytes of an outer shard, rounded down to a whole number of
       inner chunks. One shard is one HTTP object. Integer values only.
-    type: number
-    default: 16777216
+    type: integer
+    defaultValue: 16777216
     min: 1
